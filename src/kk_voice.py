@@ -1,5 +1,6 @@
-from kokoro import KPipeline
 from typing import Protocol
+
+from kokoro import KPipeline
 
 CHUNK_SIZE = 2**10
 
@@ -14,10 +15,14 @@ voice_name_map = {
 }
 
 
-class KokoroVoice(Protocol):
+class Voice(Protocol):
+    def say(self, text): ...
+
+
+class KokoroVoice:
     def __init__(self, pa, audio_lock, lang="en"):
         lang_code = language_voice_map[lang]
-        self.pipeline = KPipeline(lang_code=lang_code, repo_id='hexgrad/Kokoro-82M')
+        self.pipeline = KPipeline(lang_code=lang_code, repo_id="hexgrad/Kokoro-82M")
         self.voice = voice_name_map[lang_code]
         self.audio_lock = audio_lock
         self.pa = pa

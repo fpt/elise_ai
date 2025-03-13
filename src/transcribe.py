@@ -1,7 +1,8 @@
-import pyaudio
+from typing import Optional, Protocol
+
 import numpy as np
+import pyaudio
 import whisper
-from typing import Protocol
 
 CHUNK = 8196  # Must be larger than processing time.
 FORMAT = pyaudio.paInt16
@@ -12,11 +13,14 @@ SILENCE_DURATION = 1.5  # Seconds of silence to consider speech ended
 
 
 class Transcriber(Protocol):
+    model: whisper.Whisper
+    force_language: str
+
     def __init__(self, model_name="turbo", force_language=None):
         self.model = whisper.load_model(model_name)
         self.force_language = force_language
 
-    def transcribe_buffer(self, audio_array, sample_rate) -> str:
+    def transcribe_buffer(self, audio_array, sample_rate) -> Optional[str]:
         """
         Transcribe audio directly from buffer without saving to file.
         """
@@ -48,7 +52,7 @@ class Transcriber(Protocol):
         print(f"Detected language: {detected_language}")
         if detected_language not in ("en", "ja"):
             print(f"Unsupported language: {detected_language}")
-            return
+            return None
 
         if self.force_language:
             detected_language = self.force_language

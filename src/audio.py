@@ -1,8 +1,7 @@
 import numpy as np
-from numpy.typing import ArrayLike
 
 
-def is_silence(audio_data: ArrayLike, threshold: float) -> bool:
+def is_silence(audio_data: bytes, threshold: float) -> bool:
     """
     Determine if the audio chunk is silence based on amplitude threshold.
     """

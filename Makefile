@@ -13,11 +13,13 @@ fmt: ## Run ruff format
 lint: ## Run ruff lint
 	uv run ruff check
 
-check: ## Run ruff check
-	uv run ruff check
+check: lint mypy ## Run check
 
 fix: ## Run ruff check --fix
 	uv run ruff check --fix
+
+mypy: ## Run mypy
+	uv run mypy . --ignore-missing-imports --no-namespace-packages
 
 zip: ## Make zip archive
 	zip -er archive.zip pyproject.toml Makefile README.md .gitignore .python-version src/ tests/

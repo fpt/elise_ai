@@ -1,6 +1,6 @@
-from AppKit import AVSpeechSynthesizer, AVSpeechSynthesisVoice, AVSpeechUtterance
-from typing import Protocol
 import asyncio
+
+from AppKit import AVSpeechSynthesisVoice, AVSpeechSynthesizer, AVSpeechUtterance
 
 language_voice_map = {"en": "en-US", "ja": "ja-JP"}
 
@@ -10,7 +10,7 @@ voice_name_map = {
 }
 
 
-class MacVoice(Protocol):
+class MacVoice:
     def __init__(self, audio_lock, lang="en"):
         if lang == "ja":
             self.voice_lang = "ja-JP"

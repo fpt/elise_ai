@@ -126,7 +126,13 @@ The project includes several Makefile commands to help with development:
 
 - [OpenAI Whisper](https://github.com/openai/whisper)
 - [LangChain](https://python.langchain.com/docs/get_started/introduction)
+- [Claude API](https://docs.anthropic.com/claude/reference/getting-started-with-the-api)
 - [Optimizing Latency for Conversational AI](https://elevenlabs.io/blog/how-do-you-optimize-latency-for-conversational-ai)
+
+## TODO
+
+- Ctrl-C doesn't stop asycio tasks correctly.
+    - https://stackoverflow.com/questions/48562893/how-to-gracefully-terminate-an-asyncio-script-with-ctrl-c
 
 ## License
 

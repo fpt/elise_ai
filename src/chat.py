@@ -1,15 +1,21 @@
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from typing import Protocol
+
+from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts.chat import ChatPromptTemplate
-from langchain_anthropic import ChatAnthropic
-from typing import Protocol
 
 prompt_base = """You are a speech chatbot.
 Respond to the user's messages with short and concise answers.
-Until it is requested, don't describe instructions or provide help."""
+Until it is requested, don't describe instructions or provide help.
+The user's messages are coming from voice-to-text, so they may be a bit messy."""
 
 
 class ChatAgent(Protocol):
+    def chat(self, msg: str): ...
+
+
+class ChatAnthropicAgent:
     def __init__(self, lang="en"):
         """
         Initializes the chat system with a specified voice and language.

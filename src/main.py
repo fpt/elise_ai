@@ -1,12 +1,13 @@
-import pyaudio
-import numpy as np
+import argparse
 import asyncio
 
-from transcribe import Transcriber
-from chat import ChatAgent
-from kk_voice import KokoroVoice
-import argparse
+import numpy as np
+import pyaudio
+
 from audio import is_silence
+from chat import ChatAgent, ChatAnthropicAgent
+from kk_voice import KokoroVoice, Voice
+from transcribe import Transcriber
 
 INT16_MAX = 32768
 CHUNK = 1024  # Must be larger than processing time.
@@ -114,7 +115,7 @@ async def transcribe_worker(
         print(f"transcribe_worker Error: {e}")
 
 
-async def chat_worker(chat_queue, speech_queue, chat_agent: ChatAgent):
+async def chat_worker(chat_agent: ChatAgent, chat_queue, speech_queue):
     try:
         while True:
             message = await chat_queue.get()
@@ -128,7 +129,7 @@ async def chat_worker(chat_queue, speech_queue, chat_agent: ChatAgent):
         print(f"chat_worker Error: {e}")
 
 
-async def speech_worker(speech_queue, voice: KokoroVoice):
+async def speech_worker(voice: Voice, speech_queue):
     try:
         while True:
             speech = await speech_queue.get()
@@ -136,7 +137,7 @@ async def speech_worker(speech_queue, voice: KokoroVoice):
             await voice.say(speech)
             speech_queue.task_done()
     except Exception as e:
-        print(f"transcribe_worker Error: {e}")
+        print(f"speech_worker Error: {e}")
 
 
 async def main():
@@ -150,9 +151,10 @@ async def main():
 
     pa = pyaudio.PyAudio()
     audio_lock = asyncio.Lock()
+    # voice = MacVoice(audio_lock, lang=args.lang)
     voice = KokoroVoice(pa, audio_lock, lang=args.lang)
     transcriber = Transcriber(model_name=WHISPER_MODEL, force_language=args.lang)
-    chat_agent = ChatAgent(lang=args.lang)
+    chat_agent = ChatAnthropicAgent(lang=args.lang)
     audio_queue = asyncio.Queue()
     chat_queue = asyncio.Queue()
     speech_queue = asyncio.Queue()
@@ -160,8 +162,8 @@ async def main():
     task = asyncio.create_task(
         transcribe_worker(transcriber, audio_queue, chat_queue, RATE)
     )
-    task2 = asyncio.create_task(chat_worker(chat_queue, speech_queue, chat_agent))
-    task3 = asyncio.create_task(speech_worker(speech_queue, voice))
+    task2 = asyncio.create_task(chat_worker(chat_agent, chat_queue, speech_queue))
+    task3 = asyncio.create_task(speech_worker(voice, speech_queue))
 
     try:
         await process_audio(pa, audio_queue, audio_lock, chat_queue)
