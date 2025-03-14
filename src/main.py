@@ -120,4 +120,12 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        print("Received exit, exiting")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+    finally:
+        loop.close()
