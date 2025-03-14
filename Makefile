@@ -1,6 +1,9 @@
 run:
 	uv run src/main.py
 
+run-debug:
+	uv run src/main.py --debug
+
 run-ja:
 	uv run src/main.py --lang ja
 

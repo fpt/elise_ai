@@ -1,10 +1,11 @@
 import argparse
 import asyncio
 import os
+import traceback
 
 import pyaudio
 
-from audio import RATE, process_audio
+from audio import RATE, AudioInput
 from chat import ChatAgent, ChatAnthropicAgent
 from config import Config
 from kk_voice import KokoroVoice, Voice
@@ -69,6 +70,9 @@ async def main():
     parser.add_argument(
         "--lang", type=str, default="en", help="Language for transcription"
     )
+    parser.add_argument(
+        "--debug", action="store_true", help="Enable debug mode for logging"
+    )
     args = parser.parse_args()
 
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -78,15 +82,16 @@ async def main():
 
     pa = pyaudio.PyAudio()
     audio_lock = asyncio.Lock()
-    # voice = MacVoice(audio_lock, lang=args.lang)
-    voice = KokoroVoice(pa, audio_lock, lang=args.lang)
+    audio_queue = asyncio.Queue()
+    chat_queue = asyncio.Queue()
+    speech_queue = asyncio.Queue()
+
+    input = AudioInput(pa, audio_queue, audio_lock, debug=args.debug)
     transcriber = Transcriber(model_name=config.whisper_model, force_language=args.lang)
     chat_agent = ChatAnthropicAgent(
         api_key=config.anthropic_api_key, model=config.anthropic_model, lang=args.lang
     )
-    audio_queue = asyncio.Queue()
-    chat_queue = asyncio.Queue()
-    speech_queue = asyncio.Queue()
+    voice = KokoroVoice(pa, audio_lock, lang=args.lang, debug=args.debug)
 
     task = asyncio.create_task(
         transcribe_worker(transcriber, audio_queue, chat_queue, RATE)
@@ -95,10 +100,7 @@ async def main():
     task3 = asyncio.create_task(speech_worker(voice, speech_queue))
 
     try:
-        await process_audio(
-            pa,
-            audio_queue,
-            audio_lock,
+        await input.process_audio(
             silence_duration=config.silence_duration,
             min_speech_duration=config.min_speech_duration,
             silence_threshold=config.silence_threshold,
@@ -120,12 +122,14 @@ async def main():
 
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     try:
         loop.run_until_complete(main())
     except KeyboardInterrupt:
         print("Received exit, exiting")
     except Exception as e:
         print(f"Unexpected error: {e}")
+        traceback.print_exc()
     finally:
         loop.close()

@@ -2,7 +2,9 @@ from typing import Protocol
 
 from kokoro import KPipeline
 
-CHUNK_SIZE = 2**10
+SPEECH_FORMAT_WIDTH = 4
+SPEECH_CHANNELS = 1
+SPEECH_RATE = 24000
 
 # 🇺🇸 'a' => American English, 🇬🇧 'b' => British English
 # 🇯🇵 'j' => Japanese: pip install misaki[ja]
@@ -20,7 +22,8 @@ class Voice(Protocol):
 
 
 class KokoroVoice:
-    def __init__(self, pa, audio_lock, lang="en"):
+    def __init__(self, pa, audio_lock, lang="en", debug=False):
+        self.debug = debug
         lang_code = language_voice_map[lang]
         self.pipeline = KPipeline(lang_code=lang_code, repo_id="hexgrad/Kokoro-82M")
         self.voice = voice_name_map[lang_code]
@@ -33,26 +36,28 @@ class KokoroVoice:
 
         generator = self.pipeline(
             text,
-            voice=self.voice,  # <= change voice here
+            voice=self.voice,
             speed=1.1,
             split_pattern=r"\n+",
         )
 
         try:
             stream = self.pa.open(
-                format=self.pa.get_format_from_width(4, unsigned=False),
-                channels=1,
-                rate=24000,
+                format=self.pa.get_format_from_width(
+                    SPEECH_FORMAT_WIDTH, unsigned=False
+                ),
+                channels=SPEECH_CHANNELS,
+                rate=SPEECH_RATE,
                 output=True,
             )
 
             for i, (gs, ps, audio) in enumerate(generator):
-                print(i)  # i => index
-                print(gs)  # gs => graphemes/text
-                print(ps)  # ps => phonemes
+                print(f"{i}: {gs}")  # i => index, gs => graphemes/text
+                if self.debug:
+                    print(ps)  # ps => phonemes
                 stream.write(audio.numpy().tobytes())
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error while playing audio: {e}")
         finally:
             stream.stop_stream()
             stream.close()
