@@ -70,7 +70,9 @@ flowchart LR
 1. Install required components.
 
 ```bash
-brew install uv direnv portaudio
+brew install uv portaudio
+# optional but recommended.
+brew install make direnv
 ```
 
 2. Clone this repository

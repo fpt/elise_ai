@@ -13,8 +13,6 @@ dependencies = [
     "openai-whisper>=20240930",
     "pip>=25.0.1",
     "pyaudio>=0.2.14",
-    "pyobjc-framework-avfoundation>=11.0",
-    "pyobjc-framework-Cocoa>=11.0",
 ]
 
 [dependency-groups]
