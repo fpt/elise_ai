@@ -1,92 +1,14 @@
 import argparse
 import asyncio
+import os
 
-import numpy as np
 import pyaudio
 
-from audio import is_silence
+from audio import RATE, process_audio
 from chat import ChatAgent, ChatAnthropicAgent
+from config import Config
 from kk_voice import KokoroVoice, Voice
 from transcribe import Transcriber
-
-INT16_MAX = 32768
-CHUNK = 1024  # Must be larger than processing time.
-FORMAT = pyaudio.paInt16
-CHANNELS = 1
-RATE = 44100
-SILENCE_THRESHOLD = 32768 * 0.02  # Adjust this value based on your environment
-SILENCE_DURATION = 1.5  # Seconds of silence to consider speech ended
-MIN_SPEECH_DURATION = 1.5  # Minimum duration of speech to consider valid
-WHISPER_MODEL = "turbo"
-
-
-async def process_audio(pa, audio_queue, audio_lock, chat_queue):
-    print("* Listening for speech...")
-
-    try:
-        while True:
-            frames = []
-            silent_chunks = 0
-            is_speaking = False
-
-            # Keep listening until we detect speech followed by silence
-            stream = pa.open(
-                format=FORMAT,
-                channels=CHANNELS,
-                rate=RATE,
-                input=True,
-                frames_per_buffer=CHUNK,
-            )
-            while True:
-                await audio_lock.acquire()
-                try:
-                    audio_data = stream.read(CHUNK, exception_on_overflow=False)
-                finally:
-                    audio_lock.release()
-
-                # If we detect sound
-                if not is_silence(audio_data, SILENCE_THRESHOLD):
-                    is_speaking = True
-                    silent_chunks = 0
-                    frames.append(audio_data)
-                # If we detect silence after speech
-                elif is_speaking:
-                    frames.append(audio_data)
-                    silent_chunks += 1
-
-                    # If silence duration exceeds our threshold, stop recording
-                    if silent_chunks * CHUNK / RATE > SILENCE_DURATION:
-                        if len(frames) * CHUNK / RATE < MIN_SPEECH_DURATION:
-                            frames = []
-                            is_speaking = False
-                            continue
-                        break
-            stream.stop_stream()
-            stream.close()
-
-            # If we captured some speech
-            if frames and is_speaking:
-                print("* Queue speech...")
-
-                # Convert frames to audio buffer
-                audio_buffer = b"".join(frames)
-
-                # Convert to numpy array for Whisper - use float32 to match Whisper's expected dtype
-                audio_array = (
-                    np.frombuffer(audio_buffer, dtype=np.int16).astype(np.float32)
-                    / INT16_MAX
-                )
-
-                # Process with Whisper
-                audio_queue.put_nowait(audio_array)
-                await asyncio.sleep(0.1)
-
-                print("* Listening for speech...")
-
-    except KeyboardInterrupt:
-        print("* Stopping...")
-
-    print("* Stopped.")
 
 
 async def transcribe_worker(
@@ -149,12 +71,19 @@ async def main():
     )
     args = parser.parse_args()
 
+    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+    if anthropic_api_key is None:
+        raise ValueError("Please set the ANTHROPIC_API_KEY environment variable.")
+    config = Config(anthropic_api_key)
+
     pa = pyaudio.PyAudio()
     audio_lock = asyncio.Lock()
     # voice = MacVoice(audio_lock, lang=args.lang)
     voice = KokoroVoice(pa, audio_lock, lang=args.lang)
-    transcriber = Transcriber(model_name=WHISPER_MODEL, force_language=args.lang)
-    chat_agent = ChatAnthropicAgent(lang=args.lang)
+    transcriber = Transcriber(model_name=config.whisper_model, force_language=args.lang)
+    chat_agent = ChatAnthropicAgent(
+        api_key=config.anthropic_api_key, model=config.anthropic_model, lang=args.lang
+    )
     audio_queue = asyncio.Queue()
     chat_queue = asyncio.Queue()
     speech_queue = asyncio.Queue()
@@ -166,7 +95,14 @@ async def main():
     task3 = asyncio.create_task(speech_worker(voice, speech_queue))
 
     try:
-        await process_audio(pa, audio_queue, audio_lock, chat_queue)
+        await process_audio(
+            pa,
+            audio_queue,
+            audio_lock,
+            silence_duration=config.silence_duration,
+            min_speech_duration=config.min_speech_duration,
+            silence_threshold=config.silence_threshold,
+        )
     except asyncio.CancelledError:
         print("Cancelled.")
     except Exception as e:

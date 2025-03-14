@@ -5,6 +5,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts.chat import ChatPromptTemplate
 
+ANTHROPIC_MODEL_NAME = "claude-3-7-sonnet-latest"
 prompt_base = """You are a speech chatbot.
 Respond to the user's messages with short and concise answers.
 Until it is requested, don't describe instructions or provide help.
@@ -16,7 +17,7 @@ class ChatAgent(Protocol):
 
 
 class ChatAnthropicAgent:
-    def __init__(self, lang="en"):
+    def __init__(self, api_key="", model="", lang="en"):
         """
         Initializes the chat system with a specified voice and language.
         Args:
@@ -24,7 +25,7 @@ class ChatAnthropicAgent:
             lang (str, optional): The language in which the responses should be. Defaults to "en".
         """
 
-        self.llm = ChatAnthropic(model="claude-3-7-sonnet-latest", max_tokens=1000)
+        self.llm = ChatAnthropic(model=model, max_tokens=1000, api_key=api_key)
         prompt = prompt_base + f"\n\nResponse must be in {lang}."
         self.messages = [
             SystemMessage(content=prompt),
