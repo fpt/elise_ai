@@ -3,19 +3,37 @@ import asyncio
 import logging
 import os
 import traceback
+from enum import Enum
 
 import pyaudio
 
-from audio import RATE, AudioInput
 from chat import ChatAgent, ChatAnthropicAgent
 from config import Config
-from kk_voice import KokoroVoice, Voice
+from input.audio import RATE, AudioInput, Input
+from input.text import TextInput
+from input.transcribe import Transcriber
 from logging_config import setup_logging
-from transcribe import Transcriber
+from speech.kokoro import KokoroVoice, Voice
 
 setup_logging()
 
 logger = logging.getLogger(__name__)
+
+
+class INPUT(Enum):
+    VOICE = "voice"
+    TEXT = "text"
+
+    def __str__(self):
+        return self.value
+
+
+class OUTPUT(Enum):
+    SPEECH = "speech"
+    TEXT = "text"
+
+    def __str__(self):
+        return self.value
 
 
 async def transcribe_worker(
@@ -68,12 +86,49 @@ async def speech_worker(voice: Voice, speech_queue):
         logger.error(f"speech_worker Error: {e}")
 
 
+async def cleanup_tasks(tasks, speech_queue, chat_queue, audio_queue=None):
+    """Cancel all tasks and wait for them to complete."""
+    for task in tasks:
+        task.cancel()
+
+    # Give tasks time to respond to cancellation
+    await asyncio.sleep(0.1)
+
+    # Wait for all tasks to complete cancellation
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Clear out any remaining items in the queues
+    while not speech_queue.empty():
+        speech_queue.get_nowait()
+        speech_queue.task_done()
+
+    while not chat_queue.empty():
+        chat_queue.get_nowait()
+        chat_queue.task_done()
+
+    if audio_queue is not None:
+        while not audio_queue.empty():
+            audio_queue.get_nowait()
+            audio_queue.task_done()
+
+
 async def main():
     parser = argparse.ArgumentParser(
         description="Real-time speech transcription and chat."
     )
     parser.add_argument(
         "--lang", type=str, default="en", help="Language for transcription"
+    )
+    parser.add_argument(
+        "--input", type=str, choices=INPUT, default=INPUT.VOICE.value, help="Input type"
+    )
+    parser.add_argument(
+        "--output",
+        choices=OUTPUT,
+        type=str,
+        default=OUTPUT.SPEECH.value,
+        help="Output type",
     )
     parser.add_argument(
         "--debug", action="store_true", help="Enable debug mode for logging"
@@ -93,43 +148,62 @@ async def main():
 
     pa = pyaudio.PyAudio()
     audio_lock = asyncio.Lock()
-    audio_queue = asyncio.Queue()
-    chat_queue = asyncio.Queue()
-    speech_queue = asyncio.Queue()
+    audio_queue = asyncio.Queue(maxsize=1)
+    chat_queue = asyncio.Queue(maxsize=1)
+    speech_queue = asyncio.Queue(maxsize=1)
 
-    input = AudioInput(pa, audio_queue, audio_lock, debug=args.debug)
-    transcriber = Transcriber(model_name=config.whisper_model, force_language=args.lang)
     chat_agent = ChatAnthropicAgent(
         api_key=config.anthropic_api_key, model=config.anthropic_model, lang=args.lang
     )
     voice = KokoroVoice(pa, audio_lock, lang=args.lang, debug=args.debug)
 
-    task = asyncio.create_task(
-        transcribe_worker(transcriber, audio_queue, chat_queue, RATE)
-    )
-    task2 = asyncio.create_task(chat_worker(chat_agent, chat_queue, speech_queue))
-    task3 = asyncio.create_task(speech_worker(voice, speech_queue))
+    input: Input = None
+    tasks = []
+    if args.input == INPUT.VOICE.value:
+        input = AudioInput(pa, audio_queue, audio_lock, debug=args.debug)
+        transcriber = Transcriber(
+            model_name=config.whisper_model, force_language=args.lang
+        )
+        tasks.append(
+            asyncio.create_task(
+                transcribe_worker(transcriber, audio_queue, chat_queue, RATE)
+            )
+        )
+    elif args.input == INPUT.TEXT.value:
+        input = TextInput(chat_queue)
+
+    tasks.append(asyncio.create_task(chat_worker(chat_agent, chat_queue, speech_queue)))
+    tasks.append(asyncio.create_task(speech_worker(voice, speech_queue)))
 
     try:
-        await input.process_audio(
-            silence_duration=config.silence_duration,
-            min_speech_duration=config.min_speech_duration,
-            silence_threshold=config.silence_threshold,
-        )
+        while True:
+            if args.input == INPUT.VOICE.value:
+                await input.receive(
+                    silence_duration=config.silence_duration,
+                    min_speech_duration=config.min_speech_duration,
+                    silence_threshold=config.silence_threshold,
+                )
+            elif args.input == INPUT.TEXT.value:
+                await input.receive()
     except asyncio.CancelledError:
         logger.info("Cancelled.")
+    except EOFError:
+        logging.info("* Stopping...")
+    except KeyboardInterrupt:
+        logging.info("* Stopping...")
     except Exception as e:
         logger.error(f"Error: {e}")
     finally:
-        logger.info("Done.")
+        # Properly cleanup tasks and queues
+        await cleanup_tasks(
+            tasks,
+            speech_queue,
+            chat_queue,
+            audio_queue if args.input == INPUT.VOICE.value else None,
+        )
 
-    task3.cancel()
-    await speech_queue.join()
-    task2.cancel()
-    await chat_queue.join()
-    task.cancel()
-    await audio_queue.join()
-    pa.terminate()
+        logger.info("Stopped.")
+        pa.terminate()
 
 
 if __name__ == "__main__":
