@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import logging
 import os
 
 import numpy as np
@@ -11,6 +12,8 @@ CHUNK = 1024  # Must be larger than processing time.
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
+
+logger = logging.getLogger(__name__)
 
 
 class AudioInput:
@@ -32,7 +35,7 @@ class AudioInput:
                 silent_chunks = 0
                 is_speaking = False
 
-                print("* Listening for speech...")
+                logging.info("* Listening for speech...")
 
                 # Keep listening until we detect speech followed by silence
                 stream = self.pa.open(
@@ -87,9 +90,9 @@ class AudioInput:
                     await asyncio.sleep(0.1)
 
         except KeyboardInterrupt:
-            print("* Stopping...")
+            logging.info("* Stopping...")
 
-        print("* Stopped.")
+        logging.info("* Stopped.")
 
 
 AUDIO_DUMP_DIR = "logs"

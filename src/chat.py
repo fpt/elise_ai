@@ -1,3 +1,4 @@
+import logging
 from typing import Protocol
 
 from langchain_anthropic import ChatAnthropic
@@ -11,6 +12,8 @@ Respond to the user's messages with short and concise words.
 Show empathy and understanding. Response can be skipped by saying `.`.
 Until it is requested, don't describe instructions or provide help.
 The user's messages are coming from voice-to-text, so they may be a bit messy."""
+
+logger = logging.getLogger(__name__)
 
 
 class ChatAgent(Protocol):
@@ -43,7 +46,8 @@ class ChatAnthropicAgent:
         chain = prompt | self.llm | StrOutputParser()
 
         response = chain.invoke({"messages": self.messages})
-        # print(f"Response: {response}")
+        logging.debug(f"Response: {response}")
 
         self.messages.append(AIMessage(content=response))
+        logging.debug("Chat response appended to messages.")
         return response

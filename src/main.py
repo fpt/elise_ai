@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import logging
 import os
 import traceback
 
@@ -9,7 +10,12 @@ from audio import RATE, AudioInput
 from chat import ChatAgent, ChatAnthropicAgent
 from config import Config
 from kk_voice import KokoroVoice, Voice
+from logging_config import setup_logging
 from transcribe import Transcriber
+
+setup_logging()
+
+logger = logging.getLogger(__name__)
 
 
 async def transcribe_worker(
@@ -18,24 +24,24 @@ async def transcribe_worker(
     try:
         while True:
             audio_array = await audio_queue.get()
-            print("* Transcribing...")
+            logger.info("* Transcribing...")
 
             result = transcriber.transcribe_buffer(audio_array, sample_rate)
 
             # Skip if result doesn't contain valid word
             if result is None or not any(char.isalnum() for char in result):
-                print(f"{result} does not contain valid word.")
+                logger.warning(f"{result} does not contain valid word.")
                 audio_queue.task_done()
                 continue
 
             # Print the recognized text
-            print(f"Transcript: {result}")
+            logger.info(f"Transcript: {result}")
             if result:
                 chat_queue.put_nowait(result)
 
             audio_queue.task_done()
     except Exception as e:
-        print(f"transcribe_worker Error: {e}")
+        logger.error(f"transcribe_worker Error: {e}")
 
 
 async def chat_worker(chat_agent: ChatAgent, chat_queue, speech_queue):
@@ -43,24 +49,23 @@ async def chat_worker(chat_agent: ChatAgent, chat_queue, speech_queue):
         while True:
             message = await chat_queue.get()
 
-            print("* Chatting...")
+            logger.info("* Chatting...")
             speech = await chat_agent.chat(message)
             speech_queue.put_nowait(speech)
 
             chat_queue.task_done()
     except Exception as e:
-        print(f"chat_worker Error: {e}")
+        logger.error(f"chat_worker Error: {e}")
 
 
 async def speech_worker(voice: Voice, speech_queue):
     try:
         while True:
             speech = await speech_queue.get()
-            # print(f"* Saying... {speech}")
             await voice.say(speech)
             speech_queue.task_done()
     except Exception as e:
-        print(f"speech_worker Error: {e}")
+        logger.error(f"speech_worker Error: {e}")
 
 
 async def main():
@@ -74,6 +79,12 @@ async def main():
         "--debug", action="store_true", help="Enable debug mode for logging"
     )
     args = parser.parse_args()
+
+    # Set log level based on --debug option
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.INFO)
 
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
     if anthropic_api_key is None:
@@ -106,11 +117,11 @@ async def main():
             silence_threshold=config.silence_threshold,
         )
     except asyncio.CancelledError:
-        print("Cancelled.")
+        logger.info("Cancelled.")
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error: {e}")
     finally:
-        print("Done.")
+        logger.info("Done.")
 
     task3.cancel()
     await speech_queue.join()
@@ -127,9 +138,9 @@ if __name__ == "__main__":
     try:
         loop.run_until_complete(main())
     except KeyboardInterrupt:
-        print("Received exit, exiting")
+        logger.info("Received exit, exiting")
     except Exception as e:
-        print(f"Unexpected error: {e}")
+        logger.error(f"Unexpected error: {e}")
         traceback.print_exc()
     finally:
         loop.close()
