@@ -18,13 +18,13 @@ async def process_audio(
     min_speech_duration=1.5,
     silence_threshold=0.02,
 ):
-    print("* Listening for speech...")
-
     try:
         while True:
             frames = []
             silent_chunks = 0
             is_speaking = False
+
+            print("* Listening for speech...")
 
             # Keep listening until we detect speech followed by silence
             stream = pa.open(
@@ -77,8 +77,6 @@ async def process_audio(
                 # Process with Whisper
                 audio_queue.put_nowait(audio_array)
                 await asyncio.sleep(0.1)
-
-                print("* Listening for speech...")
 
     except KeyboardInterrupt:
         print("* Stopping...")

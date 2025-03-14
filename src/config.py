@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-SILENCE_THRESHOLD = 0.025  # Adjust this value based on your environment
+SILENCE_THRESHOLD = 0.02  # Adjust this value based on your environment
 SILENCE_DURATION = 1.5  # Seconds of silence to consider speech ended
 MIN_SPEECH_DURATION = 1.5  # Minimum duration of speech to consider valid
 WHISPER_MODEL = "turbo"
