@@ -1,3 +1,4 @@
+import logging
 from typing import Protocol
 
 from kokoro import KPipeline
@@ -16,6 +17,8 @@ voice_name_map = {
     "j": "jf_alpha",
 }
 
+logger = logging.getLogger(__name__)
+
 
 class Voice(Protocol):
     def say(self, text): ...
@@ -29,7 +32,7 @@ class KokoroVoice:
         self.voice = voice_name_map[lang_code]
         self.audio_lock = audio_lock
         self.pa = pa
-        print(f"LangCode: {lang_code}, Voice: {self.voice}")
+        logger.info(f"LangCode: {lang_code}, Voice: {self.voice}")
 
     async def say(self, text):
         await self.audio_lock.acquire()
@@ -52,12 +55,12 @@ class KokoroVoice:
             )
 
             for i, (gs, ps, audio) in enumerate(generator):
-                print(f"{i}: {gs}")  # i => index, gs => graphemes/text
+                logger.info(f"{i}: {gs}")  # i => index, gs => graphemes/text
                 if self.debug:
-                    print(ps)  # ps => phonemes
+                    logger.debug(ps)  # ps => phonemes
                 stream.write(audio.numpy().tobytes())
         except Exception as e:
-            print(f"Error while playing audio: {e}")
+            logger.error(f"Error while playing audio: {e}")
         finally:
             stream.stop_stream()
             stream.close()

@@ -1,3 +1,4 @@
+import logging
 from typing import Optional, Protocol
 
 import numpy as np
@@ -10,6 +11,8 @@ CHANNELS = 1
 RATE = 44100
 SILENCE_THRESHOLD = 500  # Adjust this value based on your environment
 SILENCE_DURATION = 1.5  # Seconds of silence to consider speech ended
+
+logger = logging.getLogger(__name__)
 
 
 class Transcriber(Protocol):
@@ -36,22 +39,22 @@ class Transcriber(Protocol):
 
         # Pad or trim to fit Whisper's expected input
         audio_array = audio_array.astype(np.float32)
-        # print(f"Audio shape: {audio_array.shape} type: {audio_array.dtype}")
+        # logger.debug(f"Audio shape: {audio_array.shape} type: {audio_array.dtype}")
         audio_array = whisper.pad_or_trim(audio_array)
-        # print(f"Audio shape: {audio_array.shape} type: {audio_array.dtype}")
+        # logger.debug(f"Audio shape: {audio_array.shape} type: {audio_array.dtype}")
 
         # Make log-Mel spectrogram
         mel = whisper.log_mel_spectrogram(
             audio_array, n_mels=self.model.dims.n_mels
         ).to(self.model.device)
-        # print(f"Mel shape: {mel.shape} type: {mel.dtype}")
+        # logger.debug(f"Mel shape: {mel.shape} type: {mel.dtype}")
 
         # Detect language
         _, probs = self.model.detect_language(mel)
         detected_language = max(probs, key=probs.get)
-        print(f"Detected language: {detected_language}")
+        logger.info(f"Detected language: {detected_language}")
         if detected_language not in ("en", "ja"):
-            print(f"Unsupported language: {detected_language}")
+            logger.warning(f"Unsupported language: {detected_language}")
             return None
 
         if self.force_language:

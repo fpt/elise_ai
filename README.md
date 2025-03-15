@@ -135,6 +135,16 @@ The project includes several Makefile commands to help with development:
 
 - Ctrl-C doesn't stop asycio tasks correctly.
     - https://stackoverflow.com/questions/48562893/how-to-gracefully-terminate-an-asyncio-script-with-ctrl-c
+- Anthropic responds 529 if requests get longer
+```
+INFO: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 529 "
+INFO: Retrying request to /v1/messages in 0.493675 seconds
+INFO: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 529 "
+INFO: Retrying request to /v1/messages in 0.793765 seconds
+INFO: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 529 "
+ERROR: chat_worker Error: Error code: 529 - {'type': 'error', 'error': {'type': 'overloaded_error', 'message': 'Overloaded'}}
+```
+- https://python.langchain.com/docs/how_to/chatbots_memory/
 
 ## License
 
