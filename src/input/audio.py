@@ -128,5 +128,5 @@ def _is_silence(audio_data: bytes, threshold: float) -> bool:
 
     # Calculate the RMS value (Use float32 to avoid overflow)
     mn = np.mean(np.square(audio_array.astype(np.float32)))
-    rms = np.sqrt(mn)
+    rms: float = np.sqrt(mn)
     return rms < INT16_MAX * threshold
