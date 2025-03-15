@@ -10,6 +10,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install portaudio
+      run: sudo apt install -y portaudio19-dev
+
     - name: Install uv
       uses: astral-sh/setup-uv@v5
 
