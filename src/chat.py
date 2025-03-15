@@ -4,8 +4,8 @@ from typing import Protocol
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, RemoveMessage, SystemMessage
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import START, MessagesState, StateGraph
+from langgraph.checkpoint.memory import InMemorySaver  # type: ignore
+from langgraph.graph import START, MessagesState, StateGraph  # type: ignore
 
 ANTHROPIC_MODEL_NAME = "claude-3-7-sonnet-latest"
 prompt_base = """You are a speech chatbot.
@@ -69,7 +69,7 @@ class LangGraphChatAgent:
                 logger.debug(
                     f"Calling model with {system_message} and messages: {state['messages']}"
                 )
-                message_updates = model.invoke([system_message] + state["messages"])
+                message_updates = [model.invoke([system_message] + state["messages"])]
 
             return {"messages": message_updates}
 
@@ -78,7 +78,7 @@ class LangGraphChatAgent:
         workflow.add_edge(START, "model")
 
         # Add simple in-memory checkpointer
-        memory = MemorySaver()
+        memory = InMemorySaver()
         self.app = workflow.compile(checkpointer=memory)
 
         self.lang = lang
