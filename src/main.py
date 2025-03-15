@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import datetime
 import logging
 import os
 import traceback
@@ -7,7 +8,7 @@ from enum import Enum
 
 import pyaudio
 
-from chat import ChatAgent, ChatAnthropicAgent
+from chat import AnthropicChatAgent, ChatAgent
 from config import Config
 from input.audio import RATE, AudioInput, Input
 from input.text import TextInput
@@ -68,7 +69,7 @@ async def chat_worker(chat_agent: ChatAgent, chat_queue, speech_queue):
             message = await chat_queue.get()
 
             logger.info("* Chatting...")
-            speech = await chat_agent.chat(message)
+            speech = chat_agent.chat(message)
             speech_queue.put_nowait(speech)
 
             chat_queue.task_done()
@@ -113,6 +114,10 @@ async def cleanup_tasks(tasks, speech_queue, chat_queue, audio_queue=None):
             audio_queue.task_done()
 
 
+def generate_thread_id() -> str:
+    return str(datetime.datetime.now().timestamp())
+
+
 async def main():
     parser = argparse.ArgumentParser(
         description="Real-time speech transcription and chat."
@@ -152,8 +157,11 @@ async def main():
     chat_queue = asyncio.Queue(maxsize=1)
     speech_queue = asyncio.Queue(maxsize=1)
 
-    chat_agent = ChatAnthropicAgent(
-        api_key=config.anthropic_api_key, model=config.anthropic_model, lang=args.lang
+    chat_agent: ChatAgent = AnthropicChatAgent(
+        api_key=config.anthropic_api_key,
+        model_name=config.anthropic_model,
+        lang=args.lang,
+        thread_id=generate_thread_id(),
     )
     voice = KokoroVoice(pa, audio_lock, lang=args.lang, debug=args.debug)
 
