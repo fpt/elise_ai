@@ -2,9 +2,10 @@ import logging
 from typing import Protocol
 
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts.chat import ChatPromptTemplate
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import START, MessagesState, StateGraph
 
 ANTHROPIC_MODEL_NAME = "claude-3-7-sonnet-latest"
 prompt_base = """You are a speech chatbot.
@@ -20,34 +21,49 @@ class ChatAgent(Protocol):
     def chat(self, msg: str): ...
 
 
-class ChatAnthropicAgent:
-    def __init__(self, api_key="", model="", lang="en"):
-        """
-        Initializes the chat system with a specified voice and language.
-        Args:
-            voice (str): The voice to be used for the chat responses.
-            lang (str, optional): The language in which the responses should be. Defaults to "en".
-        """
+class LangGraphChatAgent:
+    def __init__(self, model: BaseChatModel, lang="en", thread_id=""):
+        system_prompt = prompt_base + f"\n\nResponse must be in {lang}."
 
-        self.llm = ChatAnthropic(model=model, max_tokens=1000, api_key=api_key)
-        prompt = prompt_base + f"\n\nResponse must be in {lang}."
-        self.messages = [
-            SystemMessage(content=prompt),
-        ]
+        workflow = StateGraph(state_schema=MessagesState)
+
+        # Define the function that calls the model
+        def call_model(state: MessagesState):
+            messages = [SystemMessage(content=system_prompt)] + state["messages"]
+            response = model.invoke(messages)
+            return {"messages": response}
+
+        # Define the node and edge
+        workflow.add_node("model", call_model)
+        workflow.add_edge(START, "model")
+
+        # Add simple in-memory checkpointer
+        memory = MemorySaver()
+        self.app = workflow.compile(checkpointer=memory)
+
         self.lang = lang
+        self.thread_id = thread_id
 
-    async def chat(self, msg: str):
-        self.messages.append(HumanMessage(content=msg))
-        prompt = ChatPromptTemplate.from_messages(
-            self.messages,
-        )
+    def chat(self, msg: str) -> str:
+        input_messages = [HumanMessage(content=msg)]
 
-        # LCEL
-        chain = prompt | self.llm | StrOutputParser()
-
-        response = chain.invoke({"messages": self.messages})
+        response = self.app.invoke(
+            {"messages": input_messages},
+            config={"configurable": {"thread_id": self.thread_id}},
+        )["messages"]
         logging.debug(f"Response: {response}")
 
-        self.messages.append(AIMessage(content=response))
-        logging.debug("Chat response appended to messages.")
-        return response
+        if response:
+            return response[-1].content
+        return "."
+
+
+class AnthropicChatAgent(LangGraphChatAgent):
+    def __init__(self, api_key="", model_name="", lang="en", thread_id=""):
+        self.llm = ChatAnthropic(
+            api_key=api_key, model_name=model_name, max_tokens=1000
+        )
+        super().__init__(self.llm, lang, thread_id)
+
+    def chat(self, msg: str) -> str:
+        return super().chat(msg)
