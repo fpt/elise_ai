@@ -8,7 +8,7 @@ from enum import Enum
 
 import pyaudio
 
-from chat import AnthropicChatAgent, ChatAgent
+from agent.chat import AnthropicChatAgent, ChatAgent
 from config import Config
 from input.audio import RATE, AudioInput, Input
 from input.text import TextInput

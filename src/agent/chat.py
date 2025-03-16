@@ -5,7 +5,10 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, RemoveMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver  # type: ignore
-from langgraph.graph import START, MessagesState, StateGraph  # type: ignore
+from langgraph.graph import END, START, MessagesState, StateGraph  # type: ignore
+from langgraph.prebuilt import ToolNode  # type: ignore
+
+from .tools import get_local_datetime, search_duckduckgo
 
 ANTHROPIC_MODEL_NAME = "claude-3-7-sonnet-latest"
 prompt_base = """You are a speech chatbot.
@@ -26,6 +29,9 @@ class LangGraphChatAgent:
         system_prompt = prompt_base + f"\n\nResponse must be in {lang}."
 
         workflow = StateGraph(state_schema=MessagesState)
+
+        tools = [get_local_datetime, search_duckduckgo]
+        model_with_tools = model.bind_tools(tools)
 
         # Define the function that calls the model
         # def call_model(state: MessagesState):
@@ -57,7 +63,7 @@ class LangGraphChatAgent:
                 logger.debug(
                     f"Calling model with {system_message}, {summary_message}, {human_message}"
                 )
-                response = model.invoke(
+                response = model_with_tools.invoke(
                     [system_message, summary_message, human_message]
                 )
                 message_updates = [
@@ -69,13 +75,27 @@ class LangGraphChatAgent:
                 logger.debug(
                     f"Calling model with {system_message} and messages: {state['messages']}"
                 )
-                message_updates = [model.invoke([system_message] + state["messages"])]
+                message_updates = [
+                    model_with_tools.invoke([system_message] + state["messages"])
+                ]
 
             return {"messages": message_updates}
 
+        def should_continue(state: MessagesState):
+            messages = state["messages"]
+            last_message = messages[-1]
+            if last_message.tool_calls:
+                return "tools"
+            return END
+
+        tool_node = ToolNode(tools)
+
         # Define the node and edge
         workflow.add_node("model", call_model)
+        workflow.add_node("tools", tool_node)
         workflow.add_edge(START, "model")
+        workflow.add_conditional_edges("model", should_continue, ["tools", END])
+        workflow.add_edge("tools", "model")
 
         # Add simple in-memory checkpointer
         memory = InMemorySaver()

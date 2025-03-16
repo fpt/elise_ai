@@ -14,11 +14,13 @@ This project creates a voice-based conversational assistant that:
 
 The system is designed to minimize latency in conversational AI by using efficient audio processing, speech detection, and response generation.
 
+### Overview flowchart 
+
 ```mermaid
 flowchart LR
     Mic[Microphone Input] -- audio data --> VAD[Voice Activity Detection]
     VAD -- audio_queue --> Transcribe[Whisper Transcription]
-    Transcribe -- chat_queue --> ChatAgent[Claude 3.7 LLM]
+    Transcribe -- chat_queue --> ChatAgent[LangGraph + Claude 3.7 LLM]
     ChatAgent -- speech_queue --> Voice[Text-to-Speech]
     Voice -- audio output --> Speaker[Speaker Output]
     
@@ -35,6 +37,15 @@ flowchart LR
     end
 ```
 
+### Langgraph diagram
+
+```mermaid
+flowchart TD
+    BEGIN --> Model[Model with tools]
+    Model -->|tool| ToolNode
+    ToolNode --> Model
+    Model --> END
+```
 
 ## Components
 
@@ -135,15 +146,6 @@ The project includes several Makefile commands to help with development:
 
 - Ctrl-C doesn't stop asycio tasks correctly.
     - https://stackoverflow.com/questions/48562893/how-to-gracefully-terminate-an-asyncio-script-with-ctrl-c
-- Anthropic responds 529 if requests get longer
-```
-INFO: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 529 "
-INFO: Retrying request to /v1/messages in 0.493675 seconds
-INFO: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 529 "
-INFO: Retrying request to /v1/messages in 0.793765 seconds
-INFO: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 529 "
-ERROR: chat_worker Error: Error code: 529 - {'type': 'error', 'error': {'type': 'overloaded_error', 'message': 'Overloaded'}}
-```
 - https://python.langchain.com/docs/how_to/chatbots_memory/
 
 ## License
