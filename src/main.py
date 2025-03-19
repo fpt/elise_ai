@@ -7,7 +7,7 @@ from enum import Enum
 
 import pyaudio
 
-from agent.chat import AnthropicChatAgent, ChatAgent, ChatOllama, ChatOpenAI
+from agent.chat import AnthropicChatAgent, ChatAgent, OllamaChatAgent, OpenAIChatAgent
 from config import Config
 from input.audio import RATE, AudioInput, Input
 from input.text import TextInput
@@ -88,17 +88,17 @@ async def main():
             thread_id=generate_thread_id(),
         )
     elif config.openai_api_key:
-        chat_agent = ChatOpenAI(
+        chat_agent = OpenAIChatAgent(
             api_key=config.openai_api_key,
-            model_name=config.openai_model,
+            model=config.openai_model,
             lang=args.lang,
             thread_id=generate_thread_id(),
         )
     elif config.ollama_host:
-        chat_agent = ChatOllama(
+        chat_agent = OllamaChatAgent(
             host=config.ollama_host,
             port=config.ollama_port,
-            model_name=config.ollama_model,
+            model=config.ollama_model,
             lang=args.lang,
             thread_id=generate_thread_id(),
         )

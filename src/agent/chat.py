@@ -19,7 +19,7 @@ from .tools import get_local_datetime
 ANTHROPIC_MODEL_NAME = "claude-3-7-sonnet-latest"
 prompt_base = """You are a speech chatbot.
 Respond to the user's messages with short and concise words.
-Show empathy and understanding. Response can be 'Ah-ha', 'I see', 'Got it', 'Go on' etc.
+Show empathy and understanding.
 Until it is requested, don't describe instructions or provide help.
 The user's messages are coming from voice-to-text, so they may be a bit messy."""
 MAX_TOKENS = 10000
@@ -137,24 +137,24 @@ class AnthropicChatAgent(LangGraphChatAgent):
 
 
 class OpenAIChatAgent(LangGraphChatAgent):
-    def __init__(self, api_key="", model_name="", lang="en", thread_id=""):
-        self.llm = ChatOpenAI(
-            api_key=api_key, model_name=model_name, max_tokens=MAX_TOKENS
-        )
+    def __init__(self, api_key="", model="", lang="en", thread_id=""):
+        self.llm = ChatOpenAI(api_key=api_key, model=model, max_tokens=MAX_TOKENS)
         super().__init__(self.llm, lang, thread_id)
-        logging.info(f"OpenAIChatAgent initialized with model {model_name}")
+        logging.info(f"OpenAIChatAgent initialized with model {model}")
 
     def chat(self, msg: str) -> str:
         return super().chat(msg)
 
 
 class OllamaChatAgent(LangGraphChatAgent):
-    def __init__(self, api_key="", model_name="", lang="en", thread_id=""):
+    def __init__(self, host="", port="", model="", lang="en", thread_id=""):
         self.llm = ChatOllama(
-            api_key=api_key, model_name=model_name, max_tokens=MAX_TOKENS
+            base_url=f"http://{host}:{port}",
+            model=model,
+            max_tokens=MAX_TOKENS,
         )
         super().__init__(self.llm, lang, thread_id)
-        logging.info(f"OllamaChatAgent initialized with model {model_name}")
+        logging.info(f"OllamaChatAgent initialized with model {model}")
 
     def chat(self, msg: str) -> str:
         return super().chat(msg)
