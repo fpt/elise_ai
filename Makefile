@@ -5,7 +5,7 @@ run-debug:
 	uv run src/main.py --debug
 
 run-text:
-	uv run src/main.py --debug --input="text"
+	uv run src/main.py --debug --input="text" --output="text"
 
 run-ja:
 	uv run src/main.py --lang ja

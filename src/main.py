@@ -14,8 +14,7 @@ from input.text import TextInput
 from input.transcribe import Transcriber
 from logging_config import setup_logging
 from speech.kokoro import KokoroVoice, Voice
-
-setup_logging()
+from speech.text import TextVoice
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +138,10 @@ async def main():
     )
     args = parser.parse_args()
 
-    # Set log level based on --debug option
+    # Set up logging with debug flag
+    setup_logging(args.debug)
+
+    # Set log level for this specific logger as well
     if args.debug:
         logger.setLevel(logging.DEBUG)
     else:
@@ -159,7 +161,11 @@ async def main():
         lang=args.lang,
         thread_id=generate_thread_id(),
     )
-    voice = KokoroVoice(pa, audio_lock, lang=args.lang, debug=args.debug)
+    voice: Voice = None
+    if args.output == OUTPUT.SPEECH.value:
+        voice = KokoroVoice(pa, audio_lock, lang=args.lang, debug=args.debug)
+    elif args.output == OUTPUT.TEXT.value:
+        voice = TextVoice()
 
     input: Input = None
     tasks = []

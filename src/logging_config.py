@@ -25,5 +25,12 @@ LOG_CONFIG = {
 }
 
 
-def setup_logging():
-    logging.config.dictConfig(LOG_CONFIG)
+def setup_logging(debug=False):
+    config = LOG_CONFIG.copy()
+    if debug:
+        # Update handlers and root logger to DEBUG level
+        config["handlers"]["console"]["level"] = "DEBUG"
+        config["handlers"]["file"]["level"] = "DEBUG"
+        config["root"]["level"] = "DEBUG"
+
+    logging.config.dictConfig(config)

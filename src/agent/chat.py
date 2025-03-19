@@ -3,7 +3,11 @@ from typing import Protocol
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, RemoveMessage, SystemMessage
+from langchain_core.messages import (
+    HumanMessage,
+    RemoveMessage,
+    SystemMessage,
+)
 from langgraph.checkpoint.memory import InMemorySaver  # type: ignore
 from langgraph.graph import END, START, MessagesState, StateGraph  # type: ignore
 from langgraph.prebuilt import ToolNode  # type: ignore
