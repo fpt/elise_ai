@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import datetime
 import logging
-import os
 import traceback
 from enum import Enum
 
@@ -146,10 +145,7 @@ async def main():
     else:
         logger.setLevel(logging.INFO)
 
-    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-    if anthropic_api_key is None:
-        raise ValueError("Please set the ANTHROPIC_API_KEY environment variable.")
-    config = Config(anthropic_api_key)
+    config = Config.from_env().validate()
 
     pa = pyaudio.PyAudio()
     audio_lock = asyncio.Lock()
