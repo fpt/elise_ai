@@ -8,6 +8,8 @@ from langchain_core.messages import (
     RemoveMessage,
     SystemMessage,
 )
+from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver  # type: ignore
 from langgraph.graph import END, START, MessagesState, StateGraph  # type: ignore
 from langgraph.prebuilt import ToolNode  # type: ignore
@@ -20,7 +22,7 @@ Respond to the user's messages with short and concise words.
 Show empathy and understanding. Response can be 'Ah-ha', 'I see', 'Got it', 'Go on' etc.
 Until it is requested, don't describe instructions or provide help.
 The user's messages are coming from voice-to-text, so they may be a bit messy."""
-
+MAX_TOKENS = 10000
 logger = logging.getLogger(__name__)
 
 
@@ -125,9 +127,34 @@ class LangGraphChatAgent:
 class AnthropicChatAgent(LangGraphChatAgent):
     def __init__(self, api_key="", model_name="", lang="en", thread_id=""):
         self.llm = ChatAnthropic(
-            api_key=api_key, model_name=model_name, max_tokens=10000
+            api_key=api_key, model_name=model_name, max_tokens=MAX_TOKENS
         )
         super().__init__(self.llm, lang, thread_id)
+        logging.info(f"AnthropicChatAgent initialized with model {model_name}")
+
+    def chat(self, msg: str) -> str:
+        return super().chat(msg)
+
+
+class OpenAIChatAgent(LangGraphChatAgent):
+    def __init__(self, api_key="", model_name="", lang="en", thread_id=""):
+        self.llm = ChatOpenAI(
+            api_key=api_key, model_name=model_name, max_tokens=MAX_TOKENS
+        )
+        super().__init__(self.llm, lang, thread_id)
+        logging.info(f"OpenAIChatAgent initialized with model {model_name}")
+
+    def chat(self, msg: str) -> str:
+        return super().chat(msg)
+
+
+class OllamaChatAgent(LangGraphChatAgent):
+    def __init__(self, api_key="", model_name="", lang="en", thread_id=""):
+        self.llm = ChatOllama(
+            api_key=api_key, model_name=model_name, max_tokens=MAX_TOKENS
+        )
+        super().__init__(self.llm, lang, thread_id)
+        logging.info(f"OllamaChatAgent initialized with model {model_name}")
 
     def chat(self, msg: str) -> str:
         return super().chat(msg)

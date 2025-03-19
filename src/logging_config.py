@@ -28,9 +28,10 @@ LOG_CONFIG = {
 def setup_logging(debug=False):
     config = LOG_CONFIG.copy()
     if debug:
-        # Update handlers and root logger to DEBUG level
-        config["handlers"]["console"]["level"] = "DEBUG"
+        # Update only file handler to DEBUG level
         config["handlers"]["file"]["level"] = "DEBUG"
+        # Root logger still needs to be at DEBUG to allow DEBUG messages to reach handlers
         config["root"]["level"] = "DEBUG"
+        # Console handler stays at INFO
 
     logging.config.dictConfig(config)
