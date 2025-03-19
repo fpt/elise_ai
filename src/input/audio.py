@@ -7,12 +7,13 @@ from typing import Protocol
 import numpy as np
 import pyaudio
 import soundfile as sf
+import webrtcvad
 
 INT16_MAX = 32768
-CHUNK = 1024  # Must be larger than processing time.
+CHUNK = 960  # 1024  # Must be larger than processing time.
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
-RATE = 44100
+RATE = 32000  # 44100
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,9 @@ class AudioInput:
         self.pa = pa
         self.audio_queue = audio_queue
         self.audio_lock = audio_lock
+        vad = webrtcvad.Vad()
+        vad.set_mode(3)
+        self.vad = vad
 
     async def receive(
         self,
@@ -56,7 +60,8 @@ class AudioInput:
                 self.audio_lock.release()
 
             # If we detect sound
-            if not _is_silence(audio_data, silence_threshold):
+            # if not _is_silence(audio_data, silence_threshold):
+            if self.is_speaking(audio_data, silence_threshold):
                 is_speaking = True
                 silent_chunks = 0
                 frames.append(audio_data)
@@ -91,6 +96,16 @@ class AudioInput:
             # Process with Whisper
             self.audio_queue.put_nowait(audio_array)
             await asyncio.sleep(0.1)
+
+    def is_speaking(self, audio_data: bytes, silence_threshold: float) -> bool:
+        if _is_silence(audio_data, silence_threshold):
+            return False
+        try:
+            is_speech = self.vad.is_speech(audio_data, RATE)
+        except Exception as e:
+            logger.error(f"Error in VAD: {e}")
+            is_speech = False
+        return is_speech
 
 
 AUDIO_DUMP_DIR = "logs"

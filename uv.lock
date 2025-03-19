@@ -1420,6 +1420,7 @@ dependencies = [
     { name = "pyaudio" },
     { name = "python-dotenv" },
     { name = "soundfile" },
+    { name = "webrtcvad" },
 ]
 
 [package.dev-dependencies]
@@ -1445,6 +1446,7 @@ requires-dist = [
     { name = "pyaudio", specifier = ">=0.2.14" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "soundfile", specifier = ">=0.13.1" },
+    { name = "webrtcvad", specifier = ">=2.0.10" },
 ]
 
 [package.metadata.requires-dev]
@@ -2308,6 +2310,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/a7/1a/9c522dd61b52939c2
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2a/87/abd57374044e1f627f0a905ac33c1a7daab35a3a815abfea4e1bafd3fdb1/weasel-0.4.1-py3-none-any.whl", hash = "sha256:24140a090ea1ac512a2b2f479cc64192fd1d527a7f3627671268d08ed5ac418c", size = 50270 },
 ]
+
+[[package]]
+name = "webrtcvad"
+version = "2.0.10"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/89/34/e2de2d97f3288512b9ea56f92e7452f8207eb5a0096500badf9dfd48f5e6/webrtcvad-2.0.10.tar.gz", hash = "sha256:f1bed2fb25b63fb7b1a55d64090c993c9c9167b28485ae0bcdd81cf6ede96aea", size = 66156 }
 
 [[package]]
 name = "win32-setctime"
