@@ -7,7 +7,7 @@ from enum import Enum
 
 import pyaudio
 
-from agent.chat import AnthropicChatAgent, ChatAgent
+from agent.chat import AnthropicChatAgent, ChatAgent, ChatOllama, ChatOpenAI
 from config import Config
 from input.audio import RATE, AudioInput, Input
 from input.text import TextInput
@@ -15,6 +15,7 @@ from input.transcribe import Transcriber
 from logging_config import setup_logging
 from speech.kokoro import KokoroVoice, Voice
 from speech.text import TextVoice
+from tasks import chat_worker, cleanup_tasks, speech_worker, transcribe_worker
 
 logger = logging.getLogger(__name__)
 
@@ -33,83 +34,6 @@ class OUTPUT(Enum):
 
     def __str__(self):
         return self.value
-
-
-async def transcribe_worker(
-    transcriber: Transcriber, audio_queue, chat_queue, sample_rate
-):
-    try:
-        while True:
-            audio_array = await audio_queue.get()
-            logger.info("* Transcribing...")
-
-            result = transcriber.transcribe_buffer(audio_array, sample_rate)
-
-            # Skip if result doesn't contain valid word
-            if result is None or not any(char.isalnum() for char in result):
-                logger.warning(f"{result} does not contain valid word.")
-                audio_queue.task_done()
-                continue
-
-            # Print the recognized text
-            logger.info(f"Transcript: {result}")
-            if result:
-                chat_queue.put_nowait(result)
-
-            audio_queue.task_done()
-    except Exception as e:
-        logger.error(f"transcribe_worker Error: {e}")
-
-
-async def chat_worker(chat_agent: ChatAgent, chat_queue, speech_queue):
-    try:
-        while True:
-            message = await chat_queue.get()
-
-            logger.info("* Chatting...")
-            speech = chat_agent.chat(message)
-            speech_queue.put_nowait(speech)
-
-            chat_queue.task_done()
-    except Exception as e:
-        logger.error(f"chat_worker Error: {e}")
-
-
-async def speech_worker(voice: Voice, speech_queue):
-    try:
-        while True:
-            speech = await speech_queue.get()
-            await voice.say(speech)
-            speech_queue.task_done()
-    except Exception as e:
-        logger.error(f"speech_worker Error: {e}")
-
-
-async def cleanup_tasks(tasks, speech_queue, chat_queue, audio_queue=None):
-    """Cancel all tasks and wait for them to complete."""
-    for task in tasks:
-        task.cancel()
-
-    # Give tasks time to respond to cancellation
-    await asyncio.sleep(0.1)
-
-    # Wait for all tasks to complete cancellation
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Clear out any remaining items in the queues
-    while not speech_queue.empty():
-        speech_queue.get_nowait()
-        speech_queue.task_done()
-
-    while not chat_queue.empty():
-        chat_queue.get_nowait()
-        chat_queue.task_done()
-
-    if audio_queue is not None:
-        while not audio_queue.empty():
-            audio_queue.get_nowait()
-            audio_queue.task_done()
 
 
 def generate_thread_id() -> str:
@@ -155,12 +79,32 @@ async def main():
     chat_queue = asyncio.Queue(maxsize=1)
     speech_queue = asyncio.Queue(maxsize=1)
 
-    chat_agent: ChatAgent = AnthropicChatAgent(
-        api_key=config.anthropic_api_key,
-        model_name=config.anthropic_model,
-        lang=args.lang,
-        thread_id=generate_thread_id(),
-    )
+    chat_agent: ChatAgent = None
+    if config.anthropic_api_key:
+        chat_agent = AnthropicChatAgent(
+            api_key=config.anthropic_api_key,
+            model_name=config.anthropic_model,
+            lang=args.lang,
+            thread_id=generate_thread_id(),
+        )
+    elif config.openai_api_key:
+        chat_agent = ChatOpenAI(
+            api_key=config.openai_api_key,
+            model_name=config.openai_model,
+            lang=args.lang,
+            thread_id=generate_thread_id(),
+        )
+    elif config.ollama_host:
+        chat_agent = ChatOllama(
+            host=config.ollama_host,
+            port=config.ollama_port,
+            model_name=config.ollama_model,
+            lang=args.lang,
+            thread_id=generate_thread_id(),
+        )
+    else:
+        raise ValueError("No API key set.")
+
     voice: Voice = None
     if args.output == OUTPUT.SPEECH.value:
         voice = KokoroVoice(pa, audio_lock, lang=args.lang, debug=args.debug)
