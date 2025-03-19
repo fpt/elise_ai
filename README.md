@@ -20,7 +20,7 @@ The system is designed to minimize latency in conversational AI by using efficie
 flowchart LR
     Mic[Microphone Input] -- audio data --> VAD[Voice Activity Detection]
     VAD -- audio_queue --> Transcribe[Whisper Transcription]
-    Transcribe -- chat_queue --> ChatAgent[LangGraph + Claude 3.7 LLM]
+    Transcribe -- chat_queue --> ChatAgent[LangGraph+LLM]
     ChatAgent -- speech_queue --> Voice[Text-to-Speech]
     Voice -- audio output --> Speaker[Speaker Output]
     
@@ -60,10 +60,12 @@ flowchart TD
 - Implements RMS-based silence detection to determine when speech starts and ends
 - Configurable silence threshold and duration parameters
 - Efficiently captures complete utterances without unnecessary audio
+- See [VAD](https://en.wikipedia.org/wiki/Voice_activity_detection) for more generic information.
 
 ### Language Model (LLM)
 
-- Uses LangChain with Claude 3.7 Sonnet for natural conversation
+- Uses LangChain with LLM models for natural conversation
+    - Supports Anthropic, OpenAI, Ollama
 - Maintains conversation context for coherent multi-turn interactions
 - Configured for concise responses suitable for voice interaction
 
@@ -74,7 +76,10 @@ flowchart TD
 ## Requirements
 
 - MacOS
-- Anthropic API Key
+- API Key or Ollama
+    - Anthropic
+    - OpenAI
+    - Ollama
 
 ## Installation
 
@@ -97,6 +102,9 @@ uv sync
 
 ```
 ANTHROPIC_API_KEY=<your_anthropic_api_key>
+OPENAI_API_KEY=<your_openai_api_key>
+OLLAMA_HOST=<ollama_host>
+OLLAMA_PORT=<ollama_port>
 ```
 
 ## Usage
