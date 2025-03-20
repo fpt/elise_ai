@@ -48,9 +48,10 @@ class LangGraphChatAgent:
             system_message = SystemMessage(content=system_prompt)
             message_history = state["messages"][
                 :-1
-            ]  # exclude the most recent user input
+            ]  # exclude the most recent user input or tool result
             # Summarize the messages if the chat history reaches a certain size
-            if len(message_history) >= 4:
+            # Note that last message may be a tool call
+            if len(message_history) >= 4 and not message_history[-1].tool_calls:
                 last_human_message = state["messages"][-1]
                 # Invoke the model to generate conversation summary
                 summary_prompt = (
