@@ -15,7 +15,11 @@ SILENCE_DURATION = 1.5  # Seconds of silence to consider speech ended
 logger = logging.getLogger(__name__)
 
 
-class Transcriber(Protocol):
+class TranscriberLike(Protocol):
+    def transcribe_buffer(self, audio_array, sample_rate) -> Optional[str]: ...
+
+
+class Transcriber:
     model: whisper.Whisper
     force_language: str
 

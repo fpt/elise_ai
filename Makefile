@@ -19,7 +19,7 @@ fmt: ## Run ruff format
 lint: ## Run ruff lint
 	uv run ruff check
 
-check: lint mypy ## Run check
+check: lint fmt mypy ## Run check
 
 fix: ## Run ruff check --fix
 	uv run ruff check --fix

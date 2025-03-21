@@ -1,9 +1,10 @@
 import logging
-from typing import Protocol
+from typing import AsyncGenerator
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
+    AIMessage,
     HumanMessage,
     RemoveMessage,
     SystemMessage,
@@ -24,10 +25,6 @@ Until it is requested, don't describe instructions or provide help.
 The user's messages are coming from voice-to-text, so they may be a bit messy."""
 MAX_TOKENS = 10000
 logger = logging.getLogger(__name__)
-
-
-class ChatAgent(Protocol):
-    def chat(self, msg: str): ...
 
 
 class LangGraphChatAgent:
@@ -61,6 +58,7 @@ class LangGraphChatAgent:
                 summary_message = model.invoke(
                     message_history + [HumanMessage(content=summary_prompt)]
                 )
+                summary_message.additional_kwargs["type"] = "summary"
 
                 # Delete messages that we no longer want to show up
                 delete_messages = [RemoveMessage(id=m.id) for m in state["messages"]]
@@ -111,18 +109,60 @@ class LangGraphChatAgent:
         self.lang = lang
         self.thread_id = thread_id
 
-    def chat(self, msg: str) -> str:
+    async def chat(self, msg: str) -> AsyncGenerator[str, None]:
         input_messages = [HumanMessage(content=msg)]
 
-        response = self.app.invoke(
+        async for kind, chunk in self.app.astream(
             {"messages": input_messages},
             config={"configurable": {"thread_id": self.thread_id}},
-        )["messages"]
-        logging.debug(f"Response: {response}")
+            stream_mode=["updates"],
+        ):
+            if kind != "updates":
+                logger.debug(f"Skipping kind: {kind}")
+                continue
 
-        if response:
-            return response[-1].content
-        return "."
+            if "model" in chunk:
+                responses = chunk["model"]["messages"]
+                # logging.info(f"model.messages: {responses}")
+
+                for response in responses:
+                    if type(response) is not AIMessage:
+                        # Skip non-AI messages
+                        continue
+                    if response.additional_kwargs.get("type") == "summary":
+                        # Skip summary messages
+                        continue
+
+                    content = response.content
+
+                    if type(content) is list:
+                        # Workaround for the case where the model returns multiple messages
+                        # e.g. tool calling may return multiple messages with 'type'='text' and 'type'='tool_use'
+                        # find 'type'='text' in response
+                        for r in content:
+                            # r is either str or dict
+                            if isinstance(r, str):
+                                yield r
+                            elif isinstance(r, dict):
+                                # Add type hint for mypy
+                                if r["type"] == "text":
+                                    yield r["text"]
+                                elif r["type"] == "tool_use":
+                                    logging.debug(
+                                        f"Tool use: {r['name']} id: {r['id']}"
+                                    )
+                                    pass
+                    elif type(content) is str:
+                        if content.strip():
+                            yield content
+                        else:
+                            logging.info(f"Empty response: {response}")
+                    else:
+                        logging.error(f"Unknown content type: {type(content)}")
+            elif "tools" in chunk:
+                pass  # do nothing
+            else:
+                logging.error(f"Unknown chunk: {chunk}")
 
 
 class AnthropicChatAgent(LangGraphChatAgent):
@@ -133,18 +173,12 @@ class AnthropicChatAgent(LangGraphChatAgent):
         super().__init__(self.llm, lang, thread_id)
         logging.info(f"AnthropicChatAgent initialized with model {model_name}")
 
-    def chat(self, msg: str) -> str:
-        return super().chat(msg)
-
 
 class OpenAIChatAgent(LangGraphChatAgent):
     def __init__(self, api_key="", model="", lang="en", thread_id=""):
         self.llm = ChatOpenAI(api_key=api_key, model=model, max_tokens=MAX_TOKENS)
         super().__init__(self.llm, lang, thread_id)
         logging.info(f"OpenAIChatAgent initialized with model {model}")
-
-    def chat(self, msg: str) -> str:
-        return super().chat(msg)
 
 
 class OllamaChatAgent(LangGraphChatAgent):
@@ -156,6 +190,3 @@ class OllamaChatAgent(LangGraphChatAgent):
         )
         super().__init__(self.llm, lang, thread_id)
         logging.info(f"OllamaChatAgent initialized with model {model}")
-
-    def chat(self, msg: str) -> str:
-        return super().chat(msg)
