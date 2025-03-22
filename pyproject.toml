@@ -17,6 +17,7 @@ dependencies = [
     "openai-whisper>=20240930",
     "pip>=25.0.1",
     "pyaudio>=0.2.14",
+    "python-dotenv>=1.0.1",
     "soundfile>=0.13.1",
 ]
 
