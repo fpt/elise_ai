@@ -3,8 +3,8 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
-SILENCE_THRESHOLD = 0.015  # Adjust this value based on your environment
-SILENCE_DURATION = 1.5  # Seconds of silence to consider speech ended
+SILENCE_THRESHOLD = 0.02  # Adjust this value based on your environment
+SILENCE_DURATION = 2.0  # Seconds of silence to consider speech ended
 MIN_SPEECH_DURATION = 1.0  # Minimum duration of speech to consider valid
 WHISPER_MODEL = "turbo"
 ANTHROPIC_MODEL_NAME = "claude-3-7-sonnet-latest"
