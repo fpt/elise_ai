@@ -87,8 +87,6 @@ flowchart TD
 
 ```bash
 brew install uv portaudio
-# optional but recommended.
-brew install make direnv
 ```
 
 2. Clone this repository
@@ -155,6 +153,11 @@ The project includes several Makefile commands to help with development:
 - Ctrl-C doesn't stop asycio tasks correctly.
     - https://stackoverflow.com/questions/48562893/how-to-gracefully-terminate-an-asyncio-script-with-ctrl-c
 - https://python.langchain.com/docs/how_to/chatbots_memory/
+- Adaptive Echo Cancellation
+    - https://github.com/varuncm/echo-cancel
+    - https://pypi.org/project/adaptfilt/
+    - https://github.com/echocatzh/SPEEX-AEC-python
+    - https://github.com/fjiang9/NKF-AEC
 
 ## License
 
