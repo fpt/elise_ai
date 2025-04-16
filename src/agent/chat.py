@@ -28,12 +28,12 @@ logger = logging.getLogger(__name__)
 
 
 class LangGraphChatAgent:
-    def __init__(self, model: BaseChatModel, lang="en", thread_id=""):
+    def __init__(self, model: BaseChatModel, lang="en", thread_id="", tools=[]):
         system_prompt = prompt_base + f"\n\nResponse must be in {lang}."
 
         workflow = StateGraph(state_schema=MessagesState)
 
-        tools = [get_local_datetime, remind_memory, get_cwd]
+        tools = [get_local_datetime, remind_memory, get_cwd] + tools
         model_with_tools = model.bind_tools(tools)
 
         # Define the function that calls the model
@@ -182,27 +182,27 @@ class LangGraphChatAgent:
 
 
 class AnthropicChatAgent(LangGraphChatAgent):
-    def __init__(self, api_key="", model_name="", lang="en", thread_id=""):
+    def __init__(self, api_key="", model_name="", lang="en", thread_id="", tools=[]):
         self.llm = ChatAnthropic(
             api_key=api_key, model_name=model_name, max_tokens=MAX_TOKENS
         )
-        super().__init__(self.llm, lang, thread_id)
+        super().__init__(self.llm, lang, thread_id, tools=tools)
         logging.info(f"AnthropicChatAgent initialized with model {model_name}")
 
 
 class OpenAIChatAgent(LangGraphChatAgent):
-    def __init__(self, api_key="", model="", lang="en", thread_id=""):
+    def __init__(self, api_key="", model="", lang="en", thread_id="", tools=[]):
         self.llm = ChatOpenAI(api_key=api_key, model=model, max_tokens=MAX_TOKENS)
-        super().__init__(self.llm, lang, thread_id)
+        super().__init__(self.llm, lang, thread_id, tools=tools)
         logging.info(f"OpenAIChatAgent initialized with model {model}")
 
 
 class OllamaChatAgent(LangGraphChatAgent):
-    def __init__(self, host="", port="", model="", lang="en", thread_id=""):
+    def __init__(self, host="", port="", model="", lang="en", thread_id="", tools=[]):
         self.llm = ChatOllama(
             base_url=f"http://{host}:{port}",
             model=model,
             max_tokens=MAX_TOKENS,
         )
-        super().__init__(self.llm, lang, thread_id)
+        super().__init__(self.llm, lang, thread_id, tools=tools)
         logging.info(f"OllamaChatAgent initialized with model {model}")

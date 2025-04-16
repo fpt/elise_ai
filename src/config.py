@@ -27,6 +27,7 @@ class Config:
     silence_threshold: float
     silence_duration: float
     min_speech_duration: float
+    mcp_config: str
 
     @classmethod
     def from_env(cls):
@@ -41,6 +42,7 @@ class Config:
         silence_thresh = float(os.getenv("SILENCE_THRESHOLD", SILENCE_THRESHOLD))
         silence_dur = float(os.getenv("SILENCE_DURATION", SILENCE_DURATION))
         min_speech = float(os.getenv("MIN_SPEECH_DURATION", MIN_SPEECH_DURATION))
+        mcp_config = os.getenv("MCP_CONFIG", "")
 
         return cls(
             anthropic_api_key=anthropic_api_key,
@@ -54,6 +56,7 @@ class Config:
             silence_threshold=silence_thresh,
             silence_duration=silence_dur,
             min_speech_duration=min_speech,
+            mcp_config=mcp_config,
         )
 
     def validate(self):

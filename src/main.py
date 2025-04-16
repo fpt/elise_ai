@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import datetime
 import logging
+import os
 import traceback
 from enum import Enum
 from typing import Optional
@@ -13,6 +14,7 @@ from agent.chat import (
     OllamaChatAgent,
     OpenAIChatAgent,
 )
+from agent.mcpclient import McpClientManager
 from config import Config
 from input.audio import RATE, AudioInput
 from input.text import TextInput
@@ -187,11 +189,24 @@ async def main() -> None:
     pa = pyaudio.PyAudio()
     audio_lock = asyncio.Lock()
 
+    tools = []
+    mcp_client_manager = None
+    if os.path.exists(config.mcp_config):
+        mcp_client_manager = McpClientManager(config_path=config.mcp_config)
+        await mcp_client_manager.initialize_clients()
+        try:
+            tools = await mcp_client_manager.get_all_tools()
+        except* Exception as e:
+            logger.error(f"Error during tool listing: {e}")
+            traceback.print_exc()
+            raise
+
     # Create a new chat agent with a new thread ID for this conversation
     chat_agent = make_chat_agent(
         config,
         args.lang,
         generate_thread_id(),
+        tools,
     )
 
     # Create the voice handler
@@ -228,6 +243,9 @@ async def main() -> None:
         logger.info("Stopped.")
         pa.terminate()
 
+        if mcp_client_manager:
+            await mcp_client_manager.close_all()
+
 
 def make_voice(output: OUTPUT, pa, audio_lock, lang: str, debug: bool) -> Voice:
     if output == OUTPUT.SPEECH.value:
@@ -241,6 +259,7 @@ def make_chat_agent(
     config: Config,
     lang: str,
     thread_id: str,
+    tools: list,
 ) -> ChatAgentLike:
     """Create a chat agent based on the configuration."""
 
@@ -250,6 +269,7 @@ def make_chat_agent(
             model_name=config.anthropic_model,
             lang=lang,
             thread_id=thread_id,
+            tools=tools,
         )
     elif config.openai_api_key:
         return OpenAIChatAgent(
@@ -257,6 +277,7 @@ def make_chat_agent(
             model=config.openai_model,
             lang=lang,
             thread_id=thread_id,
+            tools=tools,
         )
     elif config.ollama_host:
         return OllamaChatAgent(
@@ -265,6 +286,7 @@ def make_chat_agent(
             model=config.ollama_model,
             lang=lang,
             thread_id=thread_id,
+            tools=tools,
         )
     else:
         raise ValueError("No API key set.")
