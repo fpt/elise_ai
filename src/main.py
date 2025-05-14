@@ -127,6 +127,9 @@ async def main() -> None:
                     name="input_worker",
                 )
 
+            if input is None:
+                raise ValueError("Input handler is not initialized.")
+
             tg.create_task(
                 chat_worker(
                     chat_agent,
@@ -152,12 +155,12 @@ async def main() -> None:
                 logger.info("* Stopping...")
             else:
                 logger.info("Cancelled.")
-    except* ValueError as e:
+    except* (asyncio.CancelledError, EOFError, KeyboardInterrupt) as e:
         # Handle value errors specifically
         for _e in e.exceptions:
             logger.error(f"ValueError: {_e}")
             traceback.print_exc()
-    except* Exception as e:
+    except* (asyncio.CancelledError, EOFError, KeyboardInterrupt) as e:
         # Catch any other exceptions
         for _e in e.exceptions:
             logger.error(f"Unexpected error: {_e}")
