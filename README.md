@@ -158,6 +158,8 @@ The project includes several Makefile commands to help with development:
     - https://pypi.org/project/adaptfilt/
     - https://github.com/echocatzh/SPEEX-AEC-python
     - https://github.com/fjiang9/NKF-AEC
+- UI
+    - Urwid, rich
 
 ## License
 
