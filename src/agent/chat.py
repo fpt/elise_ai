@@ -15,7 +15,7 @@ from langgraph.checkpoint.memory import InMemorySaver  # type: ignore
 from langgraph.graph import END, START, MessagesState, StateGraph  # type: ignore
 from langgraph.prebuilt import ToolNode  # type: ignore
 
-from .tools import get_local_datetime
+from .tools import get_local_datetime, save_memory, search_memory
 
 ANTHROPIC_MODEL_NAME = "claude-3-7-sonnet-latest"
 prompt_base = """You are a speech chatbot.
@@ -33,7 +33,7 @@ class LangGraphChatAgent:
 
         workflow = StateGraph(state_schema=MessagesState)
 
-        tools = [get_local_datetime]
+        tools = [get_local_datetime, search_memory]
         model_with_tools = model.bind_tools(tools)
 
         # Define the function that calls the model
@@ -52,12 +52,15 @@ class LangGraphChatAgent:
                 last_human_message = state["messages"][-1]
                 # Invoke the model to generate conversation summary
                 summary_prompt = (
-                    "Distill the above chat messages into a single summary message. "
-                    "Include as many specific details as you can."
+                    "Distill the above chat messages into a single Markdown document. "
+                    "There should be a title, summary, related keywords and a list of details. "
+                    "Include as many specific details as you can. "
                 )
                 summary_message = model.invoke(
                     message_history + [HumanMessage(content=summary_prompt)]
                 )
+                # Save the summary message to a file
+                save_memory(summary_message.content)
                 summary_message.additional_kwargs["type"] = "summary"
 
                 # Delete messages that we no longer want to show up
@@ -71,6 +74,7 @@ class LangGraphChatAgent:
                 response = model_with_tools.invoke(
                     [system_message, summary_message, human_message]
                 )
+
                 message_updates = [
                     summary_message,
                     human_message,

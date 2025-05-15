@@ -33,7 +33,7 @@ class AudioInput:
         self,
         silence_duration=1.5,
         min_speech_duration=1.5,
-        silence_threshold=0.02,
+        silence_threshold=0.01,
     ):
         frames = []
         silent_chunks = 0

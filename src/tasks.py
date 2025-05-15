@@ -89,12 +89,12 @@ async def speech_worker(voice: Voice, speech_data: EventData, input: InputLike):
         while True:
             speech = await speech_data.get()
 
-            await voice.say(speech)
-
             # Check if this is our special marker
             if speech == "__RESPONSE_COMPLETE__":
                 # Signal completion to input to show the next prompt
                 input.notify_response_complete()
+            else:
+                await voice.say(speech)
 
             speech_data.task_done()
     except Exception as e:
