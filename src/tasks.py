@@ -31,7 +31,8 @@ async def transcribe_worker(
     transcriber: TranscriberLike,
     audio_data: EventData,
     chat_data: EventData,
-    sample_rate,
+    sample_rate: int,
+    input: InputLike,
 ):
     try:
         while True:
@@ -43,6 +44,10 @@ async def transcribe_worker(
             # Skip if result doesn't contain valid word
             if result is None or not any(char.isalnum() for char in result):
                 logger.warning(f"{result} does not contain valid word.")
+
+                # Signal that the audio data has been processed
+                input.notify_response_complete()
+
                 audio_data.task_done()
                 continue
 
@@ -57,9 +62,7 @@ async def transcribe_worker(
 
 
 async def chat_worker(
-    chat_agent: ChatAgentLike,
-    chat_data,
-    speech_data,
+    chat_agent: ChatAgentLike, chat_data: EventData, speech_data: EventData
 ):
     try:
         while True:
@@ -101,7 +104,9 @@ async def speech_worker(voice: Voice, speech_data: EventData, input: InputLike):
         logger.error(f"speech_worker Error: {e}\n{traceback.format_exc()}")
 
 
-async def cleanup_tasks(speech_data: EventData, chat_data: EventData, audio_data=None):
+async def cleanup_tasks(
+    speech_data: EventData, chat_data: EventData, audio_data: EventData = None
+):
     """Cancel all tasks and wait for them to complete."""
 
     # Give tasks time to respond to cancellation

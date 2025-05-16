@@ -111,7 +111,7 @@ async def main() -> None:
                     model_name=config.whisper_model, force_language=args.lang
                 )
                 tg.create_task(
-                    transcribe_worker(transcriber, audio_data, chat_data, RATE),
+                    transcribe_worker(transcriber, audio_data, chat_data, RATE, input),
                     name="transcribe_worker",
                 )
                 # Create the input worker task for voice input
