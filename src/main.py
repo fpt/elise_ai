@@ -18,14 +18,13 @@ from input.audio import RATE, AudioInput
 from input.text import TextInput
 from input.transcribe import Transcriber, TranscriberLike
 from logging_config import setup_logging
-from model.event import EventData
-from repository.chat import ChatAgentLike
-from repository.input import InputLike
+from model.pipeline import PipelineController
+from protocol.chat import ChatAgentLike
+from protocol.input import InputLike
 from speech.kokoro import KokoroVoice, Voice
 from speech.text import TextVoice
 from tasks import (
     chat_worker,
-    cleanup_tasks,
     input_worker,
     speech_worker,
     transcribe_worker,
@@ -90,9 +89,7 @@ async def main() -> None:
 
     pa = pyaudio.PyAudio()
     audio_lock = asyncio.Lock()
-    audio_data = EventData()
-    chat_data = EventData()
-    speech_data = EventData()
+    ctlr = PipelineController()
 
     chat_agent = make_chat_agent(
         config,
@@ -106,24 +103,24 @@ async def main() -> None:
         async with asyncio.TaskGroup() as tg:
             input: Optional[InputLike] = None
             if args.input == INPUT.VOICE.value:
-                input = AudioInput(pa, audio_data, audio_lock, debug=args.debug)
+                input = AudioInput(pa, ctlr.audio_event, audio_lock, debug=args.debug)
                 transcriber: TranscriberLike = Transcriber(
                     model_name=config.whisper_model, force_language=args.lang
                 )
                 tg.create_task(
-                    transcribe_worker(transcriber, audio_data, chat_data, RATE, input),
+                    transcribe_worker(ctlr, transcriber, RATE),
                     name="transcribe_worker",
                 )
                 # Create the input worker task for voice input
                 tg.create_task(
-                    input_worker(input, config, is_voice_input=True),
+                    input_worker(ctlr, input, config, is_voice_input=True),
                     name="input_worker",
                 )
             elif args.input == INPUT.TEXT.value:
-                input = TextInput(chat_data)
+                input = TextInput(ctlr.input_event)
                 # Create the input worker task for text input
                 tg.create_task(
-                    input_worker(input, config, is_voice_input=False),
+                    input_worker(ctlr, input, config, is_voice_input=False),
                     name="input_worker",
                 )
 
@@ -132,46 +129,37 @@ async def main() -> None:
 
             tg.create_task(
                 chat_worker(
+                    ctlr,
                     chat_agent,
-                    chat_data,
-                    speech_data,
                 ),
                 name="chat_worker",
             )
             tg.create_task(
                 speech_worker(
+                    ctlr,
                     voice,
-                    speech_data,
-                    input,
                 ),
                 name="speech_worker",
             )
 
             # No more input loop here - input worker task handles it
-    except* (asyncio.CancelledError, EOFError, KeyboardInterrupt) as e:
+    except* (asyncio.CancelledError, EOFError, KeyboardInterrupt) as term_errors:
         # Handle expected termination conditions
-        for _e in e.exceptions:
+        for _e in term_errors.exceptions:
             if isinstance(_e, KeyboardInterrupt):
                 logger.info("* Stopping...")
             else:
                 logger.info("Cancelled.")
-    except* (asyncio.CancelledError, EOFError, KeyboardInterrupt) as e:
+    except* ValueError as e:
         # Handle value errors specifically
-        for _e in e.exceptions:
-            logger.error(f"ValueError: {_e}")
-            traceback.print_exc()
-    except* (asyncio.CancelledError, EOFError, KeyboardInterrupt) as e:
-        # Catch any other exceptions
-        for _e in e.exceptions:
-            logger.error(f"Unexpected error: {_e}")
-            traceback.print_exc()
+        logger.error(f"ValueError: {e}")
+        traceback.print_exc()
+    except* Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        traceback.print_exc()
     finally:
         # Properly cleanup tasks and queues
-        await cleanup_tasks(
-            speech_data,
-            chat_data,
-            audio_data if args.input == INPUT.VOICE.value else None,
-        )
+        await ctlr.cleanup()
 
         logger.info("Stopped.")
         pa.terminate()

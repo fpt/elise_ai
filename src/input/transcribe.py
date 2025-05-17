@@ -27,7 +27,7 @@ class Transcriber:
         self.model = whisper.load_model(model_name)
         self.force_language = force_language
 
-    def transcribe_buffer(self, audio_array, sample_rate) -> Optional[str]:
+    def transcribe_buffer(self, audio_array, sample_rate) -> str | None:
         """
         Transcribe audio directly from buffer without saving to file.
         """
@@ -68,4 +68,4 @@ class Transcriber:
         options = whisper.DecodingOptions(language=detected_language, fp16=False)
         result = whisper.decode(self.model, mel, options)
 
-        return result.text
+        return str(result.text)

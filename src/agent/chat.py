@@ -15,7 +15,7 @@ from langgraph.checkpoint.memory import InMemorySaver  # type: ignore
 from langgraph.graph import END, START, MessagesState, StateGraph  # type: ignore
 from langgraph.prebuilt import ToolNode  # type: ignore
 
-from .tools import get_local_datetime, save_memory, search_memory
+from .tools import get_local_datetime, remind_memory, save_memory
 
 ANTHROPIC_MODEL_NAME = "claude-3-7-sonnet-latest"
 prompt_base = """You are a speech chatbot.
@@ -33,7 +33,7 @@ class LangGraphChatAgent:
 
         workflow = StateGraph(state_schema=MessagesState)
 
-        tools = [get_local_datetime, search_memory]
+        tools = [get_local_datetime, remind_memory]
         model_with_tools = model.bind_tools(tools)
 
         # Define the function that calls the model
@@ -60,7 +60,19 @@ class LangGraphChatAgent:
                     message_history + [HumanMessage(content=summary_prompt)]
                 )
                 # Save the summary message to a file
-                save_memory(summary_message.content)
+                # Handle case where content is not a simple string
+                if isinstance(summary_message.content, str):
+                    save_memory(summary_message.content)
+                else:
+                    # For content that is a list of strings/dicts, extract text content and join
+                    text_content = ""
+                    for item in summary_message.content:
+                        if isinstance(item, str):
+                            text_content += item
+                        elif isinstance(item, dict) and "text" in item:
+                            text_content += item["text"]
+                    save_memory(text_content)
+
                 summary_message.additional_kwargs["type"] = "summary"
 
                 # Delete messages that we no longer want to show up

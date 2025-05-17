@@ -1,6 +1,0 @@
-from typing import Protocol
-
-
-class InputLike(Protocol):
-    async def receive(self): ...
-    def notify_response_complete(self): ...

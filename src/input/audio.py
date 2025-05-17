@@ -26,22 +26,22 @@ class AudioInput:
         vad = webrtcvad.Vad()
         vad.set_mode(3)
         self.vad = vad
-        self.response_received_event = asyncio.Event()
-        self.response_received_event.set()  # Initially set so first prompt shows
 
     async def receive(
         self,
+        wait_event: asyncio.Event,
         silence_duration=1.5,
         min_speech_duration=1.5,
-        silence_threshold=0.01,
+        silence_threshold=0.015,
     ):
         frames = []
         silent_chunks = 0
         is_speaking = False
 
         # Wait until we've received a response before showing the next prompt
-        await self.response_received_event.wait()
+        await wait_event.wait()
         logging.info("* Listening for speech...")
+        wait_event.clear()
 
         # Keep listening until we detect speech followed by silence
         stream = self.pa.open(
@@ -98,13 +98,11 @@ class AudioInput:
                 / INT16_MAX
             )
 
-            # Clear the event when we send a message
-            self.response_received_event.clear()
-
             # Process with Whisper
             await self.audio_data.set(audio_array)
 
     def is_speaking(self, audio_data: bytes, silence_threshold: float) -> bool:
+        is_speech: bool = False
         if _is_silence(audio_data, silence_threshold):
             return False
         try:
@@ -113,10 +111,6 @@ class AudioInput:
             logger.error(f"Error in VAD: {e}")
             is_speech = False
         return is_speech
-
-    def notify_response_complete(self):
-        """Call this when a response is complete to allow showing the next prompt"""
-        self.response_received_event.set()
 
 
 AUDIO_DUMP_DIR = "logs"

@@ -75,7 +75,7 @@ flowchart TD
 
 ## Requirements
 
-- MacOS
+- MacOS/Windows
 - API Key or Ollama
     - Anthropic
     - OpenAI
@@ -83,11 +83,23 @@ flowchart TD
 
 ## Installation
 
+### Mac
+
 1. Install required components.
 
 ```bash
 brew install uv portaudio
 ```
+
+### Windows
+
+1. Install required components as Admin.
+
+```bash
+choco install git make uv
+```
+
+### Common
 
 2. Clone this repository
 3. Install dependencies using uv:
