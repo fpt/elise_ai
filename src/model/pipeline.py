@@ -35,12 +35,12 @@ class PipelineController:
     ```
 
     Attributes:
-        cancel_requested (Event): Signal to request cancellation of pipeline processing.
-        audio_event (EventData): Carries audio data from input to transcription.
-        input_event (EventData): Carries text data from transcription to chat.
-        speech_queue (QueuedEventData): Queues text responses from chat to speech output,
+        _cancel_requested (Event): Signal to request cancellation of pipeline processing.
+        _audio_event (EventData): Carries audio data from input to transcription.
+        _input_event (EventData): Carries text data from transcription to chat.
+        _speech_queue (QueuedEventData): Queues text responses from chat to speech output,
                                       allowing for multiple responses to be processed in sequence.
-        completed (Event): Signal that the pipeline has completed processing.
+        _completed (Event): Signal that the pipeline has completed processing.
     """
 
     def __init__(self, *, audio_data: Any = None, text_input: str | None = None):
@@ -56,13 +56,14 @@ class PipelineController:
         if audio_data is not None and text_input is not None:
             raise ValueError("Only one of audio_data or text_input can be provided")
 
-        self.cancel_requested = Event()
-        self.audio_event = EventData()
-        self.input_event = EventData()
-        self.speech_queue = (
+        # Private event and queue attributes
+        self._cancel_requested = Event()
+        self._audio_event = EventData()
+        self._input_event = EventData()
+        self._speech_queue = (
             QueuedEventData()
         )  # Using QueuedEventData for sequential processing
-        self.completed = Event()  # New event to signal pipeline completion
+        self._completed = Event()  # New event to signal pipeline completion
 
         # Store the initial input data for later use
         self._initial_audio_data = audio_data
@@ -72,9 +73,9 @@ class PipelineController:
         """Enter the async context manager."""
         # Set the initial input data now that we have an event loop
         if self._initial_audio_data is not None:
-            await self.audio_event.set(self._initial_audio_data)
+            await self._audio_event.set(self._initial_audio_data)
         elif self._initial_text_input is not None:
-            await self.input_event.set(self._initial_text_input)
+            await self._input_event.set(self._initial_text_input)
         return self
 
     async def __aexit__(
@@ -94,17 +95,17 @@ class PipelineController:
         is finished and the pipeline can be disposed of.
         """
         logger.debug("Pipeline completed")
-        self.completed.set()
+        self._completed.set()
 
     def request_cancellation(self):
         """Request cancellation of the pipeline processing."""
-        self.cancel_requested.set()
+        self._cancel_requested.set()
         # 待機中のタスクを解放するためにイベントをセット
         # Set events to allow waiting tasks to exit
-        asyncio.create_task(self.audio_event.set(None))
-        asyncio.create_task(self.input_event.set(None))
+        asyncio.create_task(self._audio_event.set(None))
+        asyncio.create_task(self._input_event.set(None))
         asyncio.create_task(
-            self.speech_queue.put(None)
+            self._speech_queue.put(None)
         )  # Using put for QueuedEventData
 
     async def cleanup(self):
@@ -117,13 +118,13 @@ class PipelineController:
 
         try:
             # Reset events to prevent hanging
-            self.speech_queue.reset()
-            self.input_event.reset()
-            self.audio_event.reset()
+            self._speech_queue.reset()
+            self._input_event.reset()
+            self._audio_event.reset()
 
             # Signal completion if not already done
-            if not self.completed.is_set():
-                self.completed.set()
+            if not self._completed.is_set():
+                self._completed.set()
         except* Exception as e:
             # Handle all cleanup exceptions using except*
             for exc in e.exceptions:
@@ -137,7 +138,7 @@ class PipelineController:
         Returns:
             bool: True if cancellation has been requested, False otherwise.
         """
-        return self.cancel_requested.is_set()
+        return self._cancel_requested.is_set()
 
     def is_completed(self) -> bool:
         """
@@ -146,10 +147,47 @@ class PipelineController:
         Returns:
             bool: True if the pipeline has completed, False otherwise.
         """
-        return self.completed.is_set()
+        return self._completed.is_set()
 
     async def wait_for_completion(self):
         """
         Wait until the pipeline has completed processing.
         """
-        await self.completed.wait()
+        await self._completed.wait()
+
+    # Accessor methods for events and queues
+    async def set_audio_data(self, data: Any):
+        """Set the audio data and signal that it's ready."""
+        await self._audio_event.set(data)
+
+    async def get_audio_data(self) -> Any:
+        """Wait for audio data to be ready and return it."""
+        return await self._audio_event.get()
+
+    async def set_input_text(self, text: str):
+        """Set the input text and signal that it's ready."""
+        await self._input_event.set(text)
+
+    async def get_input_text(self) -> str:
+        """Wait for input text to be ready and return it."""
+        return await self._input_event.get()
+
+    async def add_to_speech_queue(self, text: str):
+        """Add text to the speech queue for processing."""
+        await self._speech_queue.put(text)
+
+    async def get_from_speech_queue(self) -> Any:
+        """Get the next item from the speech queue."""
+        return await self._speech_queue.get()
+
+    def speech_queue_task_done(self):
+        """Mark a speech queue item as done."""
+        self._speech_queue.task_done()
+
+    async def mark_speech_batch_complete(self):
+        """Signal that a batch of speech items is complete."""
+        await self._speech_queue.mark_batch_complete()
+
+    async def wait_for_speech_batch_completion(self):
+        """Wait until the current speech batch is marked as complete."""
+        await self._speech_queue.wait_for_batch_completion()
