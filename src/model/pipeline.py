@@ -2,6 +2,8 @@ import asyncio
 import logging
 import traceback
 from asyncio import Event
+from types import TracebackType
+from typing import Any, Optional, Self, Type
 
 from model.event import EventData
 from model.queue_event import QueuedEventData
@@ -16,48 +18,86 @@ class PipelineController:
     This class manages several asyncio events to coordinate the flow of data
     between audio input, transcription, chat processing, and speech output.
 
+    The controller is designed to be used for a single pipeline run (from input to output)
+    and should be recreated for each new conversation.
+
+    This class can be used as a context manager:
+    ```
+    # Get input first (audio_data or text_input)
+
+    # Then create controller with the input data
+    async with PipelineController(audio_data=audio_data) as ctlr:  # For audio input
+        # Use the controller
+    # or
+    async with PipelineController(text_input=text_input) as ctlr:  # For text input
+        # Use the controller
+    # Cleanup is automatically handled when exiting the context
+    ```
+
     Attributes:
         cancel_requested (Event): Signal to request cancellation of pipeline processing.
-        input_wait (Event): Controls when new input is allowed to be processed.
         audio_event (EventData): Carries audio data from input to transcription.
         input_event (EventData): Carries text data from transcription to chat.
-        speech_event (QueuedEventData): Queues text responses from chat to speech output,
+        speech_queue (QueuedEventData): Queues text responses from chat to speech output,
                                       allowing for multiple responses to be processed in sequence.
+        completed (Event): Signal that the pipeline has completed processing.
     """
 
-    def __init__(self):
+    def __init__(self, *, audio_data: Any = None, text_input: str | None = None):
+        """
+        Initialize a new PipelineController with the specified input data.
+
+        Args:
+            audio_data: Audio data for voice input (mutually exclusive with text_input)
+            text_input: Text input for text input (mutually exclusive with audio_data)
+        """
+        if audio_data is None and text_input is None:
+            raise ValueError("Either audio_data or text_input must be provided")
+        if audio_data is not None and text_input is not None:
+            raise ValueError("Only one of audio_data or text_input can be provided")
+
         self.cancel_requested = Event()
-        self.input_wait = Event()
         self.audio_event = EventData()
         self.input_event = EventData()
         self.speech_queue = (
             QueuedEventData()
         )  # Using QueuedEventData for sequential processing
+        self.completed = Event()  # New event to signal pipeline completion
 
-        self.input_wait.set()  # Initially set to allow input
+        # Store the initial input data for later use
+        self._initial_audio_data = audio_data
+        self._initial_text_input = text_input
 
-    def start_over(self):
+    async def __aenter__(self) -> Self:
+        """Enter the async context manager."""
+        # Set the initial input data now that we have an event loop
+        if self._initial_audio_data is not None:
+            await self.audio_event.set(self._initial_audio_data)
+        elif self._initial_text_input is not None:
+            await self.input_event.set(self._initial_text_input)
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        """Exit the async context manager and clean up resources."""
+        await self.cleanup()
+
+    def complete(self):
         """
-        Reset the pipeline to its initial state to start a new conversation.
+        Signal that the pipeline has completed processing.
 
-        This clears all events and resets the data in all EventData objects,
-        allowing the pipeline to start from the beginning with new input.
+        This should be called when all processing for the current conversation
+        is finished and the pipeline can be disposed of.
         """
-        logger.debug("Resetting pipeline for new conversation")
-
-        # Clear the cancellation flag
-        self.cancel_requested.clear()
-
-        # Reset all event data
-        self.audio_event.reset()
-        self.input_event.reset()
-        self.speech_queue.reset()  # For QueuedEventData, this clears the queue
-
-        # Set the input wait event to allow for new input
-        self.input_wait.set()
+        logger.debug("Pipeline completed")
+        self.completed.set()
 
     def request_cancellation(self):
-        """パイプラインのキャンセルを要求する"""
+        """Request cancellation of the pipeline processing."""
         self.cancel_requested.set()
         # 待機中のタスクを解放するためにイベントをセット
         # Set events to allow waiting tasks to exit
@@ -66,7 +106,6 @@ class PipelineController:
         asyncio.create_task(
             self.speech_queue.put(None)
         )  # Using put for QueuedEventData
-        self.input_wait.set()
 
     async def cleanup(self):
         """
@@ -75,22 +114,16 @@ class PipelineController:
         This method should be called during shutdown to ensure
         proper cleanup of all resources and tasks.
         """
-        logger.info("Cleaning up tasks...")
-
-        # Give tasks time to respond to cancellation
-        await asyncio.sleep(0.1)
 
         try:
-            # Ensure all data is marked as processed
             # Reset events to prevent hanging
-            self.speech_queue.reset()  # For QueuedEventData, this clears the queue
+            self.speech_queue.reset()
             self.input_event.reset()
             self.audio_event.reset()
 
-            # Make sure input_wait is set to allow any blocked tasks to continue
-            self.input_wait.set()
-
-            logger.info("All tasks cleaned up successfully")
+            # Signal completion if not already done
+            if not self.completed.is_set():
+                self.completed.set()
         except* Exception as e:
             # Handle all cleanup exceptions using except*
             for exc in e.exceptions:
@@ -105,3 +138,18 @@ class PipelineController:
             bool: True if cancellation has been requested, False otherwise.
         """
         return self.cancel_requested.is_set()
+
+    def is_completed(self) -> bool:
+        """
+        Check if the pipeline has completed processing.
+
+        Returns:
+            bool: True if the pipeline has completed, False otherwise.
+        """
+        return self.completed.is_set()
+
+    async def wait_for_completion(self):
+        """
+        Wait until the pipeline has completed processing.
+        """
+        await self.completed.wait()
