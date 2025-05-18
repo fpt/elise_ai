@@ -36,6 +36,48 @@ class LangGraphChatAgent:
         tools = [get_local_datetime, remind_memory, get_cwd] + tools
         model_with_tools = model.bind_tools(tools)
 
+        def call_compaction(state: MessagesState):
+            message_history = state["messages"][:-1]
+            last_human_message = state["messages"][-1]
+
+            # Invoke the model to generate conversation summary
+            summary_prompt = (
+                "Distill the above chat messages into a single Markdown document. "
+                "There should be a title, summary, related keywords and a list of details. "
+                "Include as many specific details as you can. "
+            )
+            summary_message = model.invoke(
+                message_history + [HumanMessage(content=summary_prompt)]
+            )
+            # Save the summary message to a file
+            # Handle case where content is not a simple string
+            if isinstance(summary_message.content, str):
+                save_memory(summary_message.content)
+            else:
+                # For content that is a list of strings/dicts, extract text content and join
+                text_content = ""
+                for item in summary_message.content:
+                    if isinstance(item, str):
+                        text_content += item
+                    elif isinstance(item, dict) and "text" in item:
+                        text_content += item["text"]
+                save_memory(text_content)
+
+            summary_message.additional_kwargs["type"] = "summary"
+
+            # Delete messages that we no longer want to show up
+            delete_messages = [RemoveMessage(id=m.id) for m in state["messages"]]
+            # Re-add user message
+            human_message = HumanMessage(content=last_human_message.content)
+
+            return {
+                "messages": [
+                    summary_message,
+                    human_message,
+                ]
+                + delete_messages
+            }
+
         # Define the function that calls the model
         # def call_model(state: MessagesState):
         #     messages = [SystemMessage(content=system_prompt)] + state["messages"]
@@ -43,64 +85,22 @@ class LangGraphChatAgent:
         #     return {"messages": response}
         def call_model(state: MessagesState):
             system_message = SystemMessage(content=system_prompt)
-            message_history = state["messages"][
-                :-1
-            ]  # exclude the most recent user input or tool result
-            # Summarize the messages if the chat history reaches a certain size
-            # Note that last message may be a tool call
-            if len(message_history) >= 4 and not message_history[-1].tool_calls:
-                last_human_message = state["messages"][-1]
-                # Invoke the model to generate conversation summary
-                summary_prompt = (
-                    "Distill the above chat messages into a single Markdown document. "
-                    "There should be a title, summary, related keywords and a list of details. "
-                    "Include as many specific details as you can. "
-                )
-                summary_message = model.invoke(
-                    message_history + [HumanMessage(content=summary_prompt)]
-                )
-                # Save the summary message to a file
-                # Handle case where content is not a simple string
-                if isinstance(summary_message.content, str):
-                    save_memory(summary_message.content)
-                else:
-                    # For content that is a list of strings/dicts, extract text content and join
-                    text_content = ""
-                    for item in summary_message.content:
-                        if isinstance(item, str):
-                            text_content += item
-                        elif isinstance(item, dict) and "text" in item:
-                            text_content += item["text"]
-                    save_memory(text_content)
 
-                summary_message.additional_kwargs["type"] = "summary"
+            logger.debug(
+                f"Calling model with {system_message} and messages: {state['messages']}"
+            )
 
-                # Delete messages that we no longer want to show up
-                delete_messages = [RemoveMessage(id=m.id) for m in state["messages"]]
-                # Re-add user message
-                human_message = HumanMessage(content=last_human_message.content)
-                # Call the model with summary & response
-                logger.debug(
-                    f"Calling model with {system_message}, {summary_message}, {human_message}"
-                )
-                response = model_with_tools.invoke(
-                    [system_message, summary_message, human_message]
-                )
-
-                message_updates = [
-                    summary_message,
-                    human_message,
-                    response,
-                ] + delete_messages
-            else:
-                logger.debug(
-                    f"Calling model with {system_message} and messages: {state['messages']}"
-                )
-                message_updates = [
+            return {
+                "messages": [
                     model_with_tools.invoke([system_message] + state["messages"])
                 ]
+            }
 
-            return {"messages": message_updates}
+        def need_compaction(state: MessagesState):
+            message_history = state["messages"][:-1]
+            if len(message_history) >= 4 and not message_history[-1].tool_calls:
+                return "compaction"
+            return "model"
 
         def should_continue(state: MessagesState):
             messages = state["messages"]
@@ -111,10 +111,12 @@ class LangGraphChatAgent:
 
         tool_node = ToolNode(tools)
 
-        # Define the node and edge
+        # Define the nodes and edges
         workflow.add_node("model", call_model)
+        workflow.add_node("compaction", call_compaction)
         workflow.add_node("tools", tool_node)
-        workflow.add_edge(START, "model")
+        workflow.add_conditional_edges(START, need_compaction, ["compaction", "model"])
+        workflow.add_edge("compaction", "model")
         workflow.add_conditional_edges("model", should_continue, ["tools", END])
         workflow.add_edge("tools", "model")
 
@@ -176,6 +178,8 @@ class LangGraphChatAgent:
                     else:
                         logging.error(f"Unknown content type: {type(content)}")
             elif "tools" in chunk:
+                pass  # do nothing
+            elif "compaction" in chunk:
                 pass  # do nothing
             else:
                 logging.error(f"Unknown chunk: {chunk}")
