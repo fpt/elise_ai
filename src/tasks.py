@@ -59,7 +59,7 @@ async def transcribe_worker(
 ):
     """Worker task for transcribing audio input to text for a single pipeline run."""
     try:
-        audio_array = await ctlr.audio_event.get()
+        audio_array = await ctlr.get_audio_data()
         logger.info("* Transcribing...")
 
         result = transcriber.transcribe_buffer(audio_array, sample_rate)
@@ -74,7 +74,7 @@ async def transcribe_worker(
         # Print the recognized text
         logger.info(f"Transcript: {result}")
         if result:
-            await ctlr.input_event.set(result)
+            await ctlr.set_input_text(result)
 
         # Wait for pipeline completion or cancellation
         while not ctlr.is_completed() and not ctlr.is_cancellation_requested():
@@ -95,20 +95,20 @@ async def chat_worker(
 ):
     """Worker task for processing chat interactions for a single pipeline run."""
     try:
-        message = await ctlr.input_event.get()
+        message = await ctlr.get_input_text()
         logger.info("* Chatting...")
         response_received = False
 
         try:
             # Process chat responses
             async for response in chat_agent.chat(message):
-                await ctlr.speech_queue.put(response)
+                await ctlr.add_to_speech_queue(response)
                 response_received = True
 
             # Mark batch complete only if we got at least one response
             if response_received:
                 logger.info("Chat response complete, marking batch as complete")
-                await ctlr.speech_queue.mark_batch_complete()
+                await ctlr.mark_speech_batch_complete()
         except* asyncio.CancelledError:
             logger.info("Chat response generation cancelled")
             raise  # Re-raise to allow proper task cancellation
@@ -118,7 +118,7 @@ async def chat_worker(
             # Even if we had an error, if we got any responses at all,
             # we should mark the batch as complete
             if response_received:
-                await ctlr.speech_queue.mark_batch_complete()
+                await ctlr.mark_speech_batch_complete()
 
         # Wait for pipeline completion or cancellation
         while not ctlr.is_completed() and not ctlr.is_cancellation_requested():
@@ -134,8 +134,8 @@ async def speech_worker(ctlr: PipelineController, voice: Voice):
     """Worker task for processing speech output from the chat responses for a single pipeline run."""
     try:
         # Get the first speech item
-        speech = await ctlr.speech_queue.get()
-        ctlr.speech_queue.task_done()
+        speech = await ctlr.get_from_speech_queue()
+        ctlr.speech_queue_task_done()
 
         # Process the speech if it's not None
         if speech is not None:
@@ -143,7 +143,7 @@ async def speech_worker(ctlr: PipelineController, voice: Voice):
 
         # Create a task to wait for batch completion
         batch_completion_task = asyncio.create_task(
-            ctlr.speech_queue.wait_for_batch_completion()
+            ctlr.wait_for_speech_batch_completion()
         )
 
         try:
@@ -152,9 +152,9 @@ async def speech_worker(ctlr: PipelineController, voice: Voice):
                 try:
                     # Try to get an item with a shorter timeout for faster response
                     speech = await asyncio.wait_for(
-                        ctlr.speech_queue.get(), timeout=0.05
+                        ctlr.get_from_speech_queue(), timeout=0.05
                     )
-                    ctlr.speech_queue.task_done()
+                    ctlr.speech_queue_task_done()
 
                     if speech is not None:
                         await voice.say(speech)
@@ -166,9 +166,9 @@ async def speech_worker(ctlr: PipelineController, voice: Voice):
             while True:
                 try:
                     speech = await asyncio.wait_for(
-                        ctlr.speech_queue.get(), timeout=0.05
+                        ctlr.get_from_speech_queue(), timeout=0.05
                     )
-                    ctlr.speech_queue.task_done()
+                    ctlr.speech_queue_task_done()
 
                     if speech is not None:
                         await voice.say(speech)
