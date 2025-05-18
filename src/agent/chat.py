@@ -15,7 +15,7 @@ from langgraph.checkpoint.memory import InMemorySaver  # type: ignore
 from langgraph.graph import END, START, MessagesState, StateGraph  # type: ignore
 from langgraph.prebuilt import ToolNode  # type: ignore
 
-from .tools import get_local_datetime, remind_memory, save_memory
+from .tools import get_cwd, get_local_datetime, remind_memory, save_memory
 
 ANTHROPIC_MODEL_NAME = "claude-3-7-sonnet-latest"
 prompt_base = """You are a speech chatbot.
@@ -33,7 +33,7 @@ class LangGraphChatAgent:
 
         workflow = StateGraph(state_schema=MessagesState)
 
-        tools = [get_local_datetime, remind_memory]
+        tools = [get_local_datetime, remind_memory, get_cwd]
         model_with_tools = model.bind_tools(tools)
 
         # Define the function that calls the model
