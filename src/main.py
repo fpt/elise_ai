@@ -18,6 +18,7 @@ from input.audio import RATE, AudioInput
 from input.text import TextInput
 from input.transcribe import Transcriber, TranscriberLike
 from logging_config import setup_logging
+from model.event import EventData
 from model.pipeline import PipelineController
 from protocol.chat import ChatAgentLike
 from protocol.input import InputLike
@@ -53,6 +54,103 @@ def generate_thread_id() -> str:
     return str(datetime.datetime.now().timestamp())
 
 
+async def run_pipeline_cycle(
+    chat_agent: ChatAgentLike,
+    voice: Voice,
+    config: Config,
+    pa: pyaudio.PyAudio,
+    audio_lock: asyncio.Lock,
+    input_type: str,
+    lang: str,
+    debug: bool,
+) -> None:
+    """
+    Run a single pipeline cycle from input to output.
+
+    Creates input handlers first, then creates a TaskGroup to manage tasks,
+    and finally creates the PipelineController after input is received.
+    Uses the context manager pattern to automatically handle cleanup.
+    """
+
+    # Create the appropriate input handler first
+    input_handler: Optional[InputLike] = None
+    transcriber: Optional[TranscriberLike] = None
+
+    # Create events for the input handlers
+    audio_event = EventData()
+    input_event = EventData()
+
+    if input_type == INPUT.VOICE.value:
+        input_handler = AudioInput(pa, audio_event, audio_lock, debug=debug)
+        transcriber = Transcriber(model_name=config.whisper_model, force_language=lang)
+    elif input_type == INPUT.TEXT.value:
+        input_handler = TextInput(input_event)
+    else:
+        raise ValueError(f"Unsupported input type: {input_type}")
+
+    if input_handler is None:
+        raise ValueError("Input handler is not initialized.")
+
+    # First create the TaskGroup to manage tasks
+    async with asyncio.TaskGroup() as tg:
+        # Start the input worker to get input
+        if input_type == INPUT.VOICE.value and transcriber is not None:
+            # Start the input worker for voice input
+            tg.create_task(
+                input_worker(input_handler, config, is_voice_input=True),
+                name="input_worker_initial",
+            )
+
+            # Wait for audio input to be received
+            audio_data = await audio_event.get()
+
+            # Now create the PipelineController with the audio data
+            async with PipelineController(audio_data=audio_data) as ctlr:
+                # Create the transcribe worker to process the audio
+                tg.create_task(
+                    transcribe_worker(ctlr, transcriber, RATE),
+                    name="transcribe_worker",
+                )
+
+                # Create chat and speech worker tasks
+                tg.create_task(
+                    chat_worker(ctlr, chat_agent),
+                    name="chat_worker",
+                )
+                tg.create_task(
+                    speech_worker(ctlr, voice),
+                    name="speech_worker",
+                )
+
+                # Wait for pipeline completion
+                await ctlr.wait_for_completion()
+
+        elif input_type == INPUT.TEXT.value:
+            # Start the input worker for text input
+            tg.create_task(
+                input_worker(input_handler, config, is_voice_input=False),
+                name="input_worker_initial",
+            )
+
+            # Wait for text input to be received
+            text_input = await input_event.get()
+
+            # Now create the PipelineController with the text input
+            async with PipelineController(text_input=text_input) as ctlr:
+                # Create chat and speech worker tasks
+                tg.create_task(
+                    chat_worker(ctlr, chat_agent),
+                    name="chat_worker",
+                )
+                tg.create_task(
+                    speech_worker(ctlr, voice),
+                    name="speech_worker",
+                )
+
+                # Wait for pipeline completion
+                await ctlr.wait_for_completion()
+
+
 async def main() -> None:
     """Main function to run the application."""
     parser = argparse.ArgumentParser(
@@ -86,63 +184,32 @@ async def main() -> None:
         logger.setLevel(logging.INFO)
 
     config = Config.from_env().validate()
-
     pa = pyaudio.PyAudio()
     audio_lock = asyncio.Lock()
-    ctlr = PipelineController()
 
+    # Create a new chat agent with a new thread ID for this conversation
     chat_agent = make_chat_agent(
         config,
         args.lang,
         generate_thread_id(),
     )
 
+    # Create the voice handler
     voice = make_voice(args.output, pa, audio_lock, args.lang, args.debug)
 
     try:
-        async with asyncio.TaskGroup() as tg:
-            input: Optional[InputLike] = None
-            if args.input == INPUT.VOICE.value:
-                input = AudioInput(pa, ctlr.audio_event, audio_lock, debug=args.debug)
-                transcriber: TranscriberLike = Transcriber(
-                    model_name=config.whisper_model, force_language=args.lang
-                )
-                tg.create_task(
-                    transcribe_worker(ctlr, transcriber, RATE),
-                    name="transcribe_worker",
-                )
-                # Create the input worker task for voice input
-                tg.create_task(
-                    input_worker(ctlr, input, config, is_voice_input=True),
-                    name="input_worker",
-                )
-            elif args.input == INPUT.TEXT.value:
-                input = TextInput(ctlr.input_event)
-                # Create the input worker task for text input
-                tg.create_task(
-                    input_worker(ctlr, input, config, is_voice_input=False),
-                    name="input_worker",
-                )
-
-            if input is None:
-                raise ValueError("Input handler is not initialized.")
-
-            tg.create_task(
-                chat_worker(
-                    ctlr,
-                    chat_agent,
-                ),
-                name="chat_worker",
+        # Run pipeline cycles continuously
+        while True:
+            await run_pipeline_cycle(
+                chat_agent,
+                voice,
+                config,
+                pa,
+                audio_lock,
+                args.input,
+                args.lang,
+                args.debug,
             )
-            tg.create_task(
-                speech_worker(
-                    ctlr,
-                    voice,
-                ),
-                name="speech_worker",
-            )
-
-            # No more input loop here - input worker task handles it
     except* (asyncio.CancelledError, EOFError, KeyboardInterrupt) as term_errors:
         # Handle expected termination conditions
         for _e in term_errors.exceptions:
@@ -158,9 +225,6 @@ async def main() -> None:
         logger.error(f"Unexpected error: {e}")
         traceback.print_exc()
     finally:
-        # Properly cleanup tasks and queues
-        await ctlr.cleanup()
-
         logger.info("Stopped.")
         pa.terminate()
 

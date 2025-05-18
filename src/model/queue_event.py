@@ -101,7 +101,6 @@ class QueuedEventData:
 
         self._closed = False
         self._batch_complete.clear()  # Make sure the batch completion event is cleared
-        self._batch_complete.clear()  # Make sure the batch completion event is cleared
 
     def is_batch_complete(self) -> bool:
         """

@@ -16,18 +16,34 @@ def get_local_datetime() -> str:
 
 
 @tool
+def get_cwd() -> str:
+    """Return the current working directory."""
+    cwd = Path.cwd()
+    logging.debug(f"[Tool] Current working directory: {cwd}")
+    return str(cwd)
+
+
+@tool
 def remind_memory(
-    keyword: Annotated[str, "The keyword to search for in memory files."],
+    keyword: Annotated[
+        str, "The keywords to search for in memory files (space-separated)."
+    ],
 ) -> str:
-    """Remind memory by searching for a keyword in memory files."""
+    """Remind memory by searching for space-separated keywords in memory files (case-insensitive)."""
     Path("./knowledge").mkdir(exist_ok=True)
     files = glob.glob("./knowledge/*.txt")
     results = []
 
+    # Split the input by whitespace to get individual keywords
+    keywords = keyword.lower().split()
+
     for filename in files:
         with open(filename, "r") as f:
             content = f.read()
-            if keyword in content:
+            content_lower = content.lower()
+
+            # Check if all keywords are in the content (case-insensitive)
+            if all(kw in content_lower for kw in keywords):
                 results.append(content)
 
     logging.debug(f"[Tool] Search '{keyword}': {len(results)} files found")
