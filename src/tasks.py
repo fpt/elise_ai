@@ -175,7 +175,6 @@ async def speech_worker(ctlr: PipelineController, voice: Voice):
                 except asyncio.TimeoutError:
                     break
 
-            logger.info("Batch complete, all speech processed")
             # Signal that the pipeline has completed
             ctlr.complete()
         finally:

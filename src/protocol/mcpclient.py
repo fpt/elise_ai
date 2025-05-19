@@ -1,0 +1,13 @@
+from typing import Any, List, Protocol
+
+from langchain_core.tools import BaseTool
+
+
+class McpClientLike(Protocol):
+    async def connect(self): ...
+
+    async def close(self): ...
+
+    async def list_tools(self) -> List[BaseTool]: ...
+
+    async def call_tool(self, tool_name: str, **kwargs) -> Any: ...
