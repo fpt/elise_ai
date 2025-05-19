@@ -68,6 +68,7 @@ flowchart TD
     - Supports Anthropic, OpenAI, Ollama
 - Maintains conversation context for coherent multi-turn interactions
 - Configured for concise responses suitable for voice interaction
+- Integrates with external tools via Model Context Protocol (MCP)
 
 ### Text-to-Speech (TTS)
 
@@ -115,6 +116,7 @@ ANTHROPIC_API_KEY=<your_anthropic_api_key>
 OPENAI_API_KEY=<your_openai_api_key>
 OLLAMA_HOST=<ollama_host>
 OLLAMA_PORT=<ollama_port>
+MCP_CONFIG=<path_to_mcp_json>  # Optional: Path to MCP configuration
 ```
 
 ## Usage
@@ -146,12 +148,65 @@ The project includes several Makefile commands to help with development:
 - `make fix`: Automatically fix linting issues
 - `make help`: Display available commands
 
+## MCP Client
+
+This project supports the Model Context Protocol (MCP) for extending the AI assistant with external tools and capabilities:
+
+- Connect to one or more MCP servers to access additional tools
+- Dynamically discover and use tools from various providers
+- Add specialized capabilities without modifying core application code
+
+### Configuring MCP Servers
+
+To use MCP tools, create an `mcp.json` file in the project root directory:
+
+```json
+{
+    "mcp": {
+        "servers": {
+            "go-dev-mcp": {
+                "type": "stdio",
+                "command": "godevmcp",
+                "args": [
+                    "serve"
+                ],
+                "env": {}
+            },
+            "another-server": {
+                "type": "stdio",
+                "command": "/path/to/server",
+                "args": [
+                    "--option=value"
+                ],
+                "env": {
+                    "ENV_VAR": "value"
+                }
+            }
+        }
+    }
+}
+```
+
+Set the path to this configuration file in your `.env`:
+
+```
+MCP_CONFIG=/path/to/mcp.json
+```
+
+If `MCP_CONFIG` is not set but `mcp.json` exists in the project root, it will be used automatically.
+
+### Available MCP Tools
+
+When the application starts, it will connect to all configured MCP servers and list the available tools. These tools will be available to the LLM during conversations, allowing the AI to use them when appropriate.
+
 ## Project Structure
 
 - `src/main.py`: Main application logic and audio processing
 - `src/transcribe.py`: Whisper integration for speech recognition
 - `src/chat.py`: LangChain and Claude integration for conversation
 - `src/voice.py`: Text-to-speech functionality
+- `src/agent/mcpclient.py`: MCP client implementation
+- `src/agent/mcp_config.py`: MCP configuration handling
 
 ## References
 
