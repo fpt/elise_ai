@@ -29,7 +29,6 @@ class AudioInput:
 
     async def receive(
         self,
-        wait_event: asyncio.Event,
         silence_duration=1.5,
         min_speech_duration=1.5,
         silence_threshold=0.015,
@@ -38,10 +37,7 @@ class AudioInput:
         silent_chunks = 0
         is_speaking = False
 
-        # Wait until we've received a response before showing the next prompt
-        await wait_event.wait()
         logging.info("* Listening for speech...")
-        wait_event.clear()
 
         # Keep listening until we detect speech followed by silence
         stream = self.pa.open(
