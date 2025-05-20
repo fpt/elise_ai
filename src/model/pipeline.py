@@ -188,6 +188,10 @@ class PipelineController:
         """Signal that a batch of speech items is complete."""
         await self._speech_queue.mark_batch_complete()
 
-    async def wait_for_speech_batch_completion(self):
-        """Wait until the current speech batch is marked as complete."""
-        await self._speech_queue.wait_for_batch_completion()
+    async def speech_batch_is_complete(self) -> bool:
+        """Check if the current speech batch is marked as complete."""
+        return self._speech_queue.is_batch_complete()
+
+    # async def wait_for_speech_batch_completion(self):
+    #     """Wait until the current speech batch is marked as complete."""
+    #     await self._speech_queue.wait_for_batch_completion()

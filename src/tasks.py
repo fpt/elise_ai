@@ -25,23 +25,15 @@ async def input_worker(
         wait_event: Event to wait for before receiving input (optional)
     """
     try:
-        # Create a wait event if none is provided
-        if wait_event is None:
-            wait_event = asyncio.Event()
-            wait_event.set()  # Set the event to allow input immediately
-
         # Attempt to receive input based on the configuration
         if is_voice_input and config:
             await input_handler.receive(
-                wait_event=wait_event,
                 silence_duration=config.silence_duration,
                 min_speech_duration=config.min_speech_duration,
                 silence_threshold=config.silence_threshold,
             )
         else:
-            await input_handler.receive(
-                wait_event=wait_event,
-            )
+            await input_handler.receive()
 
     except* asyncio.CancelledError as cancel_exc:
         # Handle cancellation specifically
@@ -75,10 +67,6 @@ async def transcribe_worker(
         logger.info(f"Transcript: {result}")
         if result:
             await ctlr.set_input_text(result)
-
-        # Wait for pipeline completion or cancellation
-        while not ctlr.is_completed() and not ctlr.is_cancellation_requested():
-            await asyncio.sleep(0.01)  # Reduced sleep time for faster response
 
     except* asyncio.CancelledError as cancel_exc:
         # Handle cancellation specifically
@@ -120,9 +108,6 @@ async def chat_worker(
             if response_received:
                 await ctlr.mark_speech_batch_complete()
 
-        # Wait for pipeline completion or cancellation
-        while not ctlr.is_completed() and not ctlr.is_cancellation_requested():
-            await asyncio.sleep(0.01)  # Reduced sleep time for faster response
     except* asyncio.CancelledError as e:
         logger.info(f"Chat worker cancelled: {e}")
         raise  # Re-raise to propagate cancellation
@@ -141,14 +126,14 @@ async def speech_worker(ctlr: PipelineController, voice: Voice):
         if speech is not None:
             await voice.say(speech)
 
-        # Create a task to wait for batch completion
-        batch_completion_task = asyncio.create_task(
-            ctlr.wait_for_speech_batch_completion()
-        )
+        # # Create a task to wait for batch completion
+        # batch_completion_task = asyncio.create_task(
+        #     ctlr.wait_for_speech_batch_completion()
+        # )
 
         try:
             # Process all items until batch completion
-            while not batch_completion_task.done():
+            while not await ctlr.speech_batch_is_complete():
                 try:
                     # Try to get an item with a shorter timeout for faster response
                     speech = await asyncio.wait_for(
@@ -179,8 +164,8 @@ async def speech_worker(ctlr: PipelineController, voice: Voice):
             ctlr.complete()
         finally:
             # Always ensure we clean up the task
-            if not batch_completion_task.done():
-                batch_completion_task.cancel()
+            if not await ctlr.speech_batch_is_complete():
+                ctlr.mark_speech_batch_complete()
 
     except* asyncio.CancelledError as cancel_exc:
         # Handle worker cancellation
