@@ -17,7 +17,6 @@ from langgraph.prebuilt import ToolNode  # type: ignore
 
 from .tools import get_cwd, get_local_datetime, remind_memory, save_memory
 
-ANTHROPIC_MODEL_NAME = "claude-3-7-sonnet-latest"
 prompt_base = """You are a speech chatbot.
 Respond to the user's messages with short and concise words.
 Show empathy and understanding.

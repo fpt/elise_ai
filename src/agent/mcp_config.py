@@ -11,6 +11,7 @@ class McpServerConfig:
     command: str
     args: List[str]
     env: Dict[str, str] | None
+    system: bool = False
 
     @classmethod
     def from_dict(cls, name: str, config_dict: dict):
@@ -20,6 +21,7 @@ class McpServerConfig:
             command=config_dict.get("command", ""),
             args=config_dict.get("args", []),
             env=config_dict.get("env", {}),
+            system=config_dict.get("system", False),
         )
 
 
@@ -67,6 +69,7 @@ def load_mcp_configs(config_path: Optional[str] = None) -> Dict[str, McpServerCo
                     command="godevmcp",
                     args=["serve"],
                     env={},
+                    system=False,
                 )
             }
 
@@ -81,15 +84,3 @@ def load_mcp_configs(config_path: Optional[str] = None) -> Dict[str, McpServerCo
                 name="default", type="stdio", command="godevmcp", args=["serve"], env={}
             )
         }
-
-
-def get_default_mcp_server() -> McpServerConfig:
-    """Get the default MCP server configuration."""
-    servers = load_mcp_configs()
-    if not servers:
-        return McpServerConfig(
-            name="default", type="stdio", command="godevmcp", args=["serve"], env={}
-        )
-
-    # Return the first server if available
-    return next(iter(servers.values()))

@@ -1,6 +1,6 @@
 import asyncio
 from functools import partial
-from typing import Any, Dict, List
+from typing import Any
 
 from langchain_core.tools import BaseTool, tool
 from mcp import ClientSession, StdioServerParameters
@@ -8,43 +8,35 @@ from mcp.client.stdio import stdio_client
 
 from protocol.mcpclient import McpClientLike
 
-from .mcp_config import get_default_mcp_server, load_mcp_configs
+from .mcp_config import McpServerConfig, load_mcp_configs
 
 
 class McpClient:
     def __init__(
         self,
-        config_path: str | None = None,
-        server_name: str | None = None,
+        server_config: McpServerConfig,
         command: str | None = None,
-        args: List[str] | None = None,
-        env: Dict[str, str] | None = None,
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
     ):
         """
         Initialize an MCP client.
 
         Args:
-            config_path: Path to the mcp.json config file. If None, uses default search path.
-            server_name: Name of the server to use from the config. If None, uses the first server.
+            server_config: The server configuration object from load_mcp_configs.
             command: Override command from config. If None, uses config value.
             args: Override args from config. If None, uses config value.
             env: Override env from config. If None, uses config value.
         """
-        # Load configuration
-        if server_name:
-            servers = load_mcp_configs(config_path)
-            if server_name in servers:
-                server_config = servers[server_name]
-            else:
-                server_config = get_default_mcp_server()
-        else:
-            server_config = get_default_mcp_server()
-
         # Allow override of individual parameters
         cmd = command if command is not None else server_config.command
         arguments = args if args is not None else server_config.args
         environment = env if env is not None else server_config.env
 
+        # Store the system flag from server_config
+        self.is_system_server = server_config.system
+
+        # Create StdioServerParameters without system attribute
         self.server_params = StdioServerParameters(
             command=cmd, args=arguments, env=environment
         )
@@ -86,7 +78,7 @@ class McpClient:
         """Support for async context manager"""
         await self.close()
 
-    async def list_tools(self) -> List[BaseTool]:
+    async def list_tools(self) -> list[BaseTool]:
         """List available tools"""
         if not self.session:
             await self.connect()
@@ -111,6 +103,10 @@ class McpClient:
             )
             lc_tools.append(tool_fn)
         return lc_tools
+
+    def is_system(self) -> bool:
+        """Check if the server is a system server"""
+        return self.is_system_server
 
     async def call_tool(self, tool_name: str, **kwargs) -> Any:
         """Call a tool with arguments"""
@@ -159,11 +155,11 @@ class McpClientManager:
             config_path: Path to the mcp.json config file. If None, uses default search path.
         """
         self.config_path = config_path
-        self.clients: Dict[str, McpClientLike] = {}
+        self.clients: dict[str, McpClientLike] = {}
         self.servers = load_mcp_configs(config_path)
-        self.all_tools: List[BaseTool] = []
+        self.all_tools: list[BaseTool] = []
 
-    async def initialize_clients(self) -> Dict[str, McpClientLike]:
+    async def initialize_clients(self) -> dict[str, McpClientLike]:
         """
         Initialize MCP clients for all servers defined in the config.
 
@@ -176,30 +172,30 @@ class McpClientManager:
         # Create and connect clients for each server
         for server_name, server_config in self.servers.items():
             client = McpClient(
-                config_path=self.config_path,
-                server_name=server_name,
-                command=server_config.command,
-                args=server_config.args,
-                env=server_config.env,
+                server_config=server_config,
             )
             await client.connect()
             self.clients[server_name] = client
 
         return self.clients
 
-    async def get_all_tools(self) -> List[BaseTool]:
+    async def get_all_tools(self) -> list[BaseTool]:
         """
-        Get all tools from all connected MCP clients.
+        Get all non-system tools from connected MCP clients.
 
         Returns:
-            Combined list of all tools from all servers.
+            Combined list of non-system tools from all servers.
         """
         # Clear existing tools list
         self.all_tools = []
 
-        # Collect tools from each client
+        # Collect tools from each client that is NOT marked as system
         for server_name, client in self.clients.items():
             try:
+                # Only include non-system servers
+                if client.is_system():
+                    continue
+
                 tools = await client.list_tools()
                 # Could add server name as prefix to tools for disambiguation if needed
                 self.all_tools.extend(tools)
@@ -207,6 +203,54 @@ class McpClientManager:
                 print(f"Error getting tools from server {server_name}: {e}")
 
         return self.all_tools
+
+    async def get_system_tools(self) -> list[BaseTool]:
+        """
+        Get tools only from MCP clients marked as system servers.
+
+        Returns:
+            List of tools from system servers.
+        """
+        system_tools = []
+
+        # Collect tools from each client that is marked as system
+        for server_name, client in self.clients.items():
+            try:
+                if not client.is_system():
+                    continue
+
+                tools = await client.list_tools()
+                system_tools.extend(tools)
+            except Exception as e:
+                print(f"Error getting tools from system server {server_name}: {e}")
+
+        return system_tools
+
+    async def get_client(self, server_name: str) -> McpClientLike:
+        """
+        Get a specific MCP client by server name.
+
+        Args:
+            server_name: The name of the server to get the client for.
+
+        Returns:
+            The connected McpClient instance for the specified server.
+
+        Raises:
+            KeyError: If the server name is not found in the clients dictionary.
+        """
+        if server_name not in self.clients:
+            if server_name in self.servers:
+                # Create and connect the client if it exists in config but hasn't been initialized
+                client = McpClient(
+                    server_config=self.servers[server_name],
+                )
+                await client.connect()
+                self.clients[server_name] = client
+            else:
+                raise KeyError(f"Server '{server_name}' not found in configuration")
+
+        return self.clients[server_name]
 
     async def close_all(self):
         """Close all MCP client connections."""
@@ -230,27 +274,45 @@ class McpClientManager:
 
 # Example usage
 async def main():
-    # Using context manager approach (preferred)
-    async with McpClient() as client:
-        # List available tools
-        tools = await client.list_tools()
-        print("Available tools:")
-        for tool in tools:
-            print(f"- {tool}")
-        print()
-
-        # Call a tool
-        result = await client.call_tool("read_godoc", arguments={"package_url": "html"})
-        print(f"Tool call result: {result}")
-
-    # Example with McpClientManager
+    # Initialize the manager using async context manager
     async with McpClientManager() as manager:
-        tools = await manager.get_all_tools()
-        print(f"Found {len(tools)} tools across all MCP servers")
+        # Get all non-system tools (default behavior now)
+        non_system_tools = await manager.get_all_tools()
+        print(f"Found {len(non_system_tools)} non-system tools")
 
-        # Get a specific client if needed
-        # client = await manager.get_client("go-dev-mcp")
-        # result = await client.call_tool("read_godoc", arguments={"package_url": "html"})
+        # Get only system tools
+        system_tools = await manager.get_system_tools()
+        print(f"Found {len(system_tools)} system tools")
+
+        # Get all tools including system tools
+        all_tools = await manager.get_all_tools_including_system()
+        print(f"Found {len(all_tools)} total tools (system + non-system)")
+
+        # Get tools by server
+        server_names = list(manager.clients.keys())
+        if server_names:
+            # Get the first server client (just as an example)
+            server_name = server_names[0]
+            client = await manager.get_client(server_name)
+
+            # List tools from that specific server
+            server_tools = await client.list_tools()
+            print(f"\nTools from {server_name}:")
+            for tool in server_tools:
+                print(f"- {tool}")
+
+            # Check if this is a system server
+            is_system = client.is_system()
+            print(f"Is {server_name} a system server? {is_system}")
+
+            # Example of calling a tool on a specific server
+            try:
+                result = await client.call_tool(
+                    "read_godoc", arguments={"package_url": "html"}
+                )
+                print(f"\nTool call result: {result}")
+            except Exception as e:
+                print(f"\nError calling tool: {e}")
 
 
 if __name__ == "__main__":
