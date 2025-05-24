@@ -7,7 +7,7 @@ SILENCE_THRESHOLD = 0.015  # Adjust this value based on your environment
 SILENCE_DURATION = 2.0  # Seconds of silence to consider speech ended
 MIN_SPEECH_DURATION = 1.0  # Minimum duration of speech to consider valid
 WHISPER_MODEL = "turbo"
-ANTHROPIC_MODEL_NAME = "claude-3-7-sonnet-latest"
+ANTHROPIC_MODEL_NAME = "claude-sonnet-4-20250514"
 OPENAI_MODEL_NAME = "gpt-4o"
 OLLAMA_MODEL_NAME = "llama3.2"
 
