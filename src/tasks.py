@@ -165,7 +165,7 @@ async def speech_worker(ctlr: PipelineController, voice: Voice):
         finally:
             # Always ensure we clean up the task
             if not await ctlr.speech_batch_is_complete():
-                ctlr.mark_speech_batch_complete()
+                await ctlr.mark_speech_batch_complete()
 
     except* asyncio.CancelledError as cancel_exc:
         # Handle worker cancellation
