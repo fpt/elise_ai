@@ -35,33 +35,31 @@ class KokoroVoice:
         logger.info(f"LangCode: {lang_code}, Voice: {self.voice}")
 
     async def say(self, text):
-        await self.audio_lock.acquire()
-
-        generator = self.pipeline(
-            text,
-            voice=self.voice,
-            speed=1.1,
-            split_pattern=r"\n+",
-        )
-
-        try:
-            stream = self.pa.open(
-                format=self.pa.get_format_from_width(
-                    SPEECH_FORMAT_WIDTH, unsigned=False
-                ),
-                channels=SPEECH_CHANNELS,
-                rate=SPEECH_RATE,
-                output=True,
+        async with self.audio_lock:
+            generator = self.pipeline(
+                text,
+                voice=self.voice,
+                speed=1.1,
+                split_pattern=r"\n+",
             )
 
-            for i, (gs, ps, audio) in enumerate(generator):
-                logger.info(f"{i}: {gs}")  # i => index, gs => graphemes/text
-                if self.debug:
-                    logger.debug(ps)  # ps => phonemes
-                stream.write(audio.numpy().tobytes())
-        except Exception as e:
-            logger.error(f"Error while playing audio: {e}")
-        finally:
-            stream.stop_stream()
-            stream.close()
-            self.audio_lock.release()
+            try:
+                stream = self.pa.open(
+                    format=self.pa.get_format_from_width(
+                        SPEECH_FORMAT_WIDTH, unsigned=False
+                    ),
+                    channels=SPEECH_CHANNELS,
+                    rate=SPEECH_RATE,
+                    output=True,
+                )
+
+                for i, (gs, ps, audio) in enumerate(generator):
+                    logger.info(f"{i}: {gs}")  # i => index, gs => graphemes/text
+                    if self.debug:
+                        logger.debug(ps)  # ps => phonemes
+                    stream.write(audio.numpy().tobytes())
+            except Exception as e:
+                logger.error(f"Error while playing audio: {e}")
+            finally:
+                stream.stop_stream()
+                stream.close()

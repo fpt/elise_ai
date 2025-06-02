@@ -48,14 +48,12 @@ class AudioInput:
             frames_per_buffer=CHUNK,
         )
         while True:
-            await self.audio_lock.acquire()
-            try:
-                audio_data = stream.read(CHUNK, exception_on_overflow=False)
-            except Exception as e:
-                logger.error(f"Error reading audio data: {e}")
-                break
-            finally:
-                self.audio_lock.release()
+            async with self.audio_lock:
+                try:
+                    audio_data = stream.read(CHUNK, exception_on_overflow=False)
+                except Exception as e:
+                    logger.error(f"Error reading audio data: {e}")
+                    break
 
             # Wait for a bit to avoid blocking
             await asyncio.sleep(0.02)
